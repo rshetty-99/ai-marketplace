@@ -1,0 +1,394 @@
+name: Deploy to Firebase
+
+on:
+  push:
+    branches: [main, develop, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '20'
+  FIREBASE_CLI_EXPERIMENTS: webframeworks
+
+jobs:
+  # Code Quality and Security Checks
+  quality-check:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.changes.outputs.should-deploy }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type checking
+        run: npm run type-check
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Security audit
+        run: |
+          npm audit --audit-level=high
+          npx audit-ci --config audit-ci.json || echo "Security audit completed with warnings"
+
+      - name: Bundle analysis
+        run: npm run analyze
+        env:
+          ANALYZE: true
+
+      - name: Check for deployment changes
+        id: changes
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should-deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Comprehensive Testing Suite
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: quality-check
+    if: needs.quality-check.outputs.should-deploy == 'true'
+    
+    services:
+      firebase:
+        image: firebase/firebase-tools:latest
+        options: >-
+          --health-cmd "firebase --version"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Firebase emulators
+        run: |
+          npm install -g firebase-tools
+          firebase emulators:start --only auth,firestore,storage,functions &
+          sleep 10
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Run unit tests
+        run: npm run test:unit:coverage
+        env:
+          CI: true
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          CI: true
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Run accessibility tests
+        run: npm run test:a11y
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            coverage/
+            test-results/
+            playwright-report/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # Performance Testing
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [quality-check, test]
+    if: needs.quality-check.outputs.should-deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+        env:
+          NODE_ENV: production
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Upload Lighthouse results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+
+  # Determine deployment environment
+  environment:
+    name: Determine Environment
+    runs-on: ubuntu-latest
+    needs: quality-check
+    if: needs.quality-check.outputs.should-deploy == 'true'
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      firebase-project: ${{ steps.env.outputs.firebase-project }}
+      
+    steps:
+      - name: Determine deployment environment
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENVIRONMENT="production"
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            ENVIRONMENT="staging"
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            ENVIRONMENT="development"
+          else
+            ENVIRONMENT="development"
+          fi
+          
+          case $ENVIRONMENT in
+            production)
+              FIREBASE_PROJECT="ai-marketplace-prod"
+              ;;
+            staging)
+              FIREBASE_PROJECT="ai-marketplace-staging"
+              ;;
+            development)
+              FIREBASE_PROJECT="ai-marketplace-dev"
+              ;;
+            *)
+              FIREBASE_PROJECT="ai-marketplace-dev"
+              ;;
+          esac
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "firebase-project=$FIREBASE_PROJECT" >> $GITHUB_OUTPUT
+          
+          echo "Deploying to: $ENVIRONMENT"
+          echo "Firebase project: $FIREBASE_PROJECT"
+
+  # Build and Deploy
+  deploy:
+    name: Deploy to ${{ needs.environment.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [quality-check, test, performance, environment]
+    if: needs.quality-check.outputs.should-deploy == 'true'
+    environment:
+      name: ${{ needs.environment.outputs.environment }}
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ needs.environment.outputs.firebase-project }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets[format('FIREBASE_API_KEY_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets[format('FIREBASE_AUTH_DOMAIN_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets[format('FIREBASE_STORAGE_BUCKET_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets[format('FIREBASE_MESSAGING_SENDER_ID_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets[format('FIREBASE_APP_ID_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ secrets[format('FIREBASE_MEASUREMENT_ID_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets[format('CLERK_PUBLISHABLE_KEY_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_GA_ID: ${{ secrets[format('GA_ID_{0}', needs.environment.outputs.environment)] }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets[format('SITE_URL_{0}', needs.environment.outputs.environment)] }}
+
+      - name: Deploy to Firebase
+        id: deploy
+        run: |
+          npm install -g firebase-tools
+          
+          # Deploy Firestore rules and indexes
+          firebase deploy --only firestore:rules,firestore:indexes --project ${{ needs.environment.outputs.firebase-project }}
+          
+          # Deploy Storage rules
+          firebase deploy --only storage:rules --project ${{ needs.environment.outputs.firebase-project }}
+          
+          # Deploy hosting
+          firebase deploy --only hosting --project ${{ needs.environment.outputs.firebase-project }}
+          
+          # Get deployment URL
+          DEPLOY_URL=$(firebase hosting:channel:list --project ${{ needs.environment.outputs.firebase-project }} | grep "live" | awk '{print $3}')
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          
+          echo "Deployment completed successfully!"
+          echo "URL: $DEPLOY_URL"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Run post-deployment health checks
+        run: |
+          # Wait for deployment to propagate
+          sleep 30
+          
+          # Basic health check
+          HEALTH_URL="${{ steps.deploy.outputs.url }}/api/health"
+          for i in {1..5}; do
+            if curl -f "$HEALTH_URL"; then
+              echo "Health check passed"
+              break
+            else
+              echo "Health check failed, attempt $i/5"
+              sleep 10
+            fi
+          done
+
+      - name: Run smoke tests
+        run: |
+          npm run test:e2e -- --grep="smoke"
+        env:
+          BASE_URL: ${{ steps.deploy.outputs.url }}
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ Deployment to ${{ needs.environment.outputs.environment }} successful!"
+            echo "🌐 URL: ${{ steps.deploy.outputs.url }}"
+          else
+            echo "❌ Deployment to ${{ needs.environment.outputs.environment }} failed!"
+          fi
+
+  # Rollback on failure
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, environment]
+    if: failure() && needs.deploy.result == 'failure'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Get previous release
+        id: previous
+        run: |
+          # Get the previous successful deployment
+          PREVIOUS_RELEASE=$(firebase hosting:releases:list --project ${{ needs.environment.outputs.firebase-project }} | head -n 2 | tail -n 1 | awk '{print $1}')
+          echo "release=$PREVIOUS_RELEASE" >> $GITHUB_OUTPUT
+
+      - name: Rollback deployment
+        run: |
+          firebase hosting:clone ${{ steps.previous.outputs.release }}:live live --project ${{ needs.environment.outputs.firebase-project }}
+          echo "Rollback completed to release: ${{ steps.previous.outputs.release }}"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Notify rollback
+        run: |
+          echo "🔄 Automatic rollback completed"
+          echo "📋 Rolled back to: ${{ steps.previous.outputs.release }}"
+
+  # Security scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: quality-check
+    if: needs.quality-check.outputs.should-deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Upload Snyk results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: snyk.sarif

@@ -1,0 +1,194 @@
+{
+  "environments": {
+    "development": {
+      "firebase_project": "ai-marketplace-dev",
+      "site_url": "https://dev.ai-marketplace.com",
+      "api_base_url": "https://dev.ai-marketplace.com/api",
+      "stripe_environment": "test",
+      "sentry_environment": "development",
+      "debug_mode": true,
+      "enable_beta_features": true,
+      "cache_ttl": 300,
+      "rate_limit": {
+        "window_ms": 900000,
+        "max_requests": 200
+      },
+      "feature_flags": {
+        "ai_matching": true,
+        "ai_recommendations": true,
+        "advanced_search": true,
+        "escrow": false,
+        "subscriptions": false
+      }
+    },
+    "staging": {
+      "firebase_project": "ai-marketplace-staging",
+      "site_url": "https://staging.ai-marketplace.com",
+      "api_base_url": "https://staging.ai-marketplace.com/api",
+      "stripe_environment": "test",
+      "sentry_environment": "staging",
+      "debug_mode": false,
+      "enable_beta_features": true,
+      "cache_ttl": 900,
+      "rate_limit": {
+        "window_ms": 900000,
+        "max_requests": 150
+      },
+      "feature_flags": {
+        "ai_matching": true,
+        "ai_recommendations": true,
+        "advanced_search": true,
+        "escrow": true,
+        "subscriptions": false
+      }
+    },
+    "production": {
+      "firebase_project": "ai-marketplace-prod",
+      "site_url": "https://ai-marketplace.com",
+      "api_base_url": "https://ai-marketplace.com/api",
+      "stripe_environment": "live",
+      "sentry_environment": "production",
+      "debug_mode": false,
+      "enable_beta_features": false,
+      "cache_ttl": 3600,
+      "rate_limit": {
+        "window_ms": 900000,
+        "max_requests": 100
+      },
+      "feature_flags": {
+        "ai_matching": true,
+        "ai_recommendations": true,
+        "advanced_search": true,
+        "escrow": true,
+        "subscriptions": true
+      }
+    }
+  },
+  "deployment": {
+    "health_check_timeout": 300,
+    "max_deployment_time": 900,
+    "rollback_threshold": 5,
+    "pre_deployment_checks": [
+      "lint",
+      "type_check",
+      "unit_tests",
+      "integration_tests",
+      "security_scan"
+    ],
+    "post_deployment_checks": [
+      "health_check",
+      "smoke_tests",
+      "performance_check"
+    ]
+  },
+  "monitoring": {
+    "health_check_interval": 300,
+    "performance_check_interval": 1800,
+    "uptime_check_endpoints": [
+      "/",
+      "/api/health",
+      "/api/version"
+    ],
+    "core_web_vitals_thresholds": {
+      "lcp": 2.5,
+      "fid": 0.1,
+      "cls": 0.1
+    },
+    "error_rate_threshold": 0.01,
+    "response_time_threshold": 1000
+  },
+  "security": {
+    "csp_policy": {
+      "default-src": "'self'",
+      "script-src": "'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
+      "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src": "'self' https://fonts.gstatic.com",
+      "img-src": "'self' data: https://www.google-analytics.com https://*.firebase.com https://*.googleapis.com",
+      "connect-src": "'self' https://api.clerk.dev https://*.googleapis.com https://www.google-analytics.com wss://*.googleapis.com",
+      "frame-src": "'self' https://clerk.dev",
+      "object-src": "'none'",
+      "base-uri": "'self'",
+      "form-action": "'self'",
+      "upgrade-insecure-requests": true
+    },
+    "security_headers": {
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "X-XSS-Protection": "1; mode=block",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()"
+    },
+    "file_upload": {
+      "max_size": 10485760,
+      "allowed_image_types": ["image/jpeg", "image/png", "image/gif", "image/webp"],
+      "allowed_document_types": ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"]
+    }
+  },
+  "performance": {
+    "caching": {
+      "static_files": 31536000,
+      "api_responses": 300,
+      "images": 2592000
+    },
+    "optimization": {
+      "enable_compression": true,
+      "enable_image_optimization": true,
+      "enable_code_splitting": true,
+      "enable_lazy_loading": true
+    },
+    "cdn": {
+      "enable_cdn": true,
+      "cache_control": "public, max-age=31536000, immutable"
+    }
+  },
+  "backup": {
+    "retention": {
+      "daily": 30,
+      "weekly": 12,
+      "monthly": 12
+    },
+    "schedule": {
+      "incremental": "0 2 * * *",
+      "full": "0 1 * * 0",
+      "comprehensive": "0 0 1 * *"
+    },
+    "verification": {
+      "integrity_check": true,
+      "restore_test": true
+    }
+  },
+  "notifications": {
+    "channels": {
+      "slack": {
+        "enabled": true,
+        "events": ["deployment", "rollback", "health_check_failure", "security_alert"]
+      },
+      "email": {
+        "enabled": true,
+        "events": ["deployment_failure", "security_incident", "backup_failure"]
+      },
+      "pagerduty": {
+        "enabled": false,
+        "events": ["critical_failure", "extended_downtime"]
+      }
+    }
+  },
+  "compliance": {
+    "gdpr": {
+      "enabled": true,
+      "data_retention_days": 365,
+      "anonymization_enabled": true
+    },
+    "hipaa": {
+      "enabled": false,
+      "encryption_at_rest": true,
+      "audit_logging": true
+    },
+    "soc2": {
+      "enabled": true,
+      "access_logging": true,
+      "change_management": true
+    }
+  }
+}

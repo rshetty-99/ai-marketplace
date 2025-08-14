@@ -1,0 +1,155 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function hasPermission(permission) {
+      return isAuthenticated() && 
+             exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+             permission in get(/databases/(default)/documents/users/$(request.auth.uid)).data.permissions;
+    }
+    
+    function isSameOrganization(orgId) {
+      return isAuthenticated() && 
+             exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+             get(/databases/(default)/documents/users/$(request.auth.uid)).data.organizationId == orgId;
+    }
+    
+    function isValidImageType() {
+      return resource.contentType.matches('image/.*');
+    }
+    
+    function isValidDocumentType() {
+      return resource.contentType.matches('application/pdf') ||
+             resource.contentType.matches('application/msword') ||
+             resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+             resource.contentType.matches('text/plain');
+    }
+    
+    function isValidFileSize(maxSizeInMB) {
+      return request.resource.size <= maxSizeInMB * 1024 * 1024;
+    }
+
+    // User profile images
+    match /users/{userId}/profile/{imageId} {
+      allow read: if true; // Public profile images
+      allow write: if isOwner(userId) && 
+                      isValidImageType() && 
+                      isValidFileSize(5); // Max 5MB
+    }
+
+    // User documents (verification, contracts)
+    match /users/{userId}/documents/{documentId} {
+      allow read: if isOwner(userId) || 
+                     hasPermission('user_management') ||
+                     hasPermission('platform_admin');
+      allow write: if isOwner(userId) && 
+                      isValidDocumentType() && 
+                      isValidFileSize(10); // Max 10MB
+    }
+
+    // Organization documents and assets
+    match /organizations/{orgId}/documents/{documentId} {
+      allow read: if isSameOrganization(orgId) || 
+                     hasPermission('platform_admin');
+      allow write: if hasPermission('manage_organization') && 
+                      isSameOrganization(orgId) && 
+                      (isValidDocumentType() || isValidImageType()) && 
+                      isValidFileSize(20); // Max 20MB
+    }
+
+    // Organization logos and branding
+    match /organizations/{orgId}/branding/{assetId} {
+      allow read: if true; // Public branding assets
+      allow write: if hasPermission('manage_organization') && 
+                      isSameOrganization(orgId) && 
+                      isValidImageType() && 
+                      isValidFileSize(5); // Max 5MB
+    }
+
+    // Project files and deliverables
+    match /projects/{projectId}/files/{fileId} {
+      allow read: if isAuthenticated() && 
+                     (hasPermission('view_project') || hasPermission('platform_admin'));
+      allow write: if isAuthenticated() && 
+                      (hasPermission('edit_project') || hasPermission('platform_admin')) &&
+                      (isValidDocumentType() || isValidImageType()) && 
+                      isValidFileSize(50); // Max 50MB
+    }
+
+    // Project deliverables (larger files allowed)
+    match /projects/{projectId}/deliverables/{deliverableId} {
+      allow read: if isAuthenticated() && 
+                     (hasPermission('view_project') || hasPermission('platform_admin'));
+      allow write: if isAuthenticated() && 
+                      (hasPermission('edit_project') || hasPermission('platform_admin')) &&
+                      isValidFileSize(100); // Max 100MB
+    }
+
+    // Freelancer portfolio items
+    match /freelancers/{freelancerId}/portfolio/{itemId} {
+      allow read: if true; // Public portfolio
+      allow write: if isOwner(freelancerId) && 
+                      (isValidDocumentType() || isValidImageType()) && 
+                      isValidFileSize(25); // Max 25MB
+    }
+
+    // Service images and documents
+    match /services/{serviceId}/media/{mediaId} {
+      allow read: if true; // Public service media
+      allow write: if isAuthenticated() && 
+                      (isValidDocumentType() || isValidImageType()) && 
+                      isValidFileSize(10); // Max 10MB
+    }
+
+    // Chat/conversation attachments
+    match /conversations/{conversationId}/attachments/{attachmentId} {
+      allow read: if isAuthenticated() && 
+                     exists(/databases/(default)/documents/conversations/$(conversationId)) &&
+                     request.auth.uid in get(/databases/(default)/documents/conversations/$(conversationId)).data.participants;
+      allow write: if isAuthenticated() && 
+                      exists(/databases/(default)/documents/conversations/$(conversationId)) &&
+                      request.auth.uid in get(/databases/(default)/documents/conversations/$(conversationId)).data.participants &&
+                      (isValidDocumentType() || isValidImageType()) && 
+                      isValidFileSize(25); // Max 25MB
+    }
+
+    // System backups (admin only)
+    match /system/backups/{backupId} {
+      allow read: if hasPermission('platform_admin');
+      allow write: if false; // System generated only
+    }
+
+    // Temporary uploads (24 hour TTL)
+    match /temp/{userId}/{uploadId} {
+      allow read, write: if isOwner(userId) && 
+                            isValidFileSize(100); // Max 100MB
+    }
+
+    // Analytics exports (restricted)
+    match /analytics/exports/{exportId} {
+      allow read: if hasPermission('view_analytics') || hasPermission('platform_admin');
+      allow write: if hasPermission('platform_admin');
+    }
+
+    // Audit log exports (admin only)
+    match /audit/exports/{exportId} {
+      allow read: if hasPermission('platform_admin');
+      allow write: if false; // System generated only
+    }
+
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

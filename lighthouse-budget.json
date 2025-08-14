@@ -1,0 +1,141 @@
+[
+  {
+    "path": "/*",
+    "resourceSizes": [
+      {
+        "resourceType": "script",
+        "budget": 400
+      },
+      {
+        "resourceType": "image",
+        "budget": 500
+      },
+      {
+        "resourceType": "stylesheet",
+        "budget": 100
+      },
+      {
+        "resourceType": "font",
+        "budget": 100
+      },
+      {
+        "resourceType": "document",
+        "budget": 50
+      },
+      {
+        "resourceType": "other",
+        "budget": 200
+      },
+      {
+        "resourceType": "total",
+        "budget": 1350
+      }
+    ],
+    "resourceCounts": [
+      {
+        "resourceType": "script",
+        "budget": 15
+      },
+      {
+        "resourceType": "image",
+        "budget": 20
+      },
+      {
+        "resourceType": "stylesheet",
+        "budget": 5
+      },
+      {
+        "resourceType": "font",
+        "budget": 5
+      },
+      {
+        "resourceType": "document",
+        "budget": 1
+      },
+      {
+        "resourceType": "other",
+        "budget": 10
+      },
+      {
+        "resourceType": "third-party",
+        "budget": 10
+      },
+      {
+        "resourceType": "total",
+        "budget": 60
+      }
+    ],
+    "timings": [
+      {
+        "metric": "first-contentful-paint",
+        "budget": 2000
+      },
+      {
+        "metric": "largest-contentful-paint",
+        "budget": 2500
+      },
+      {
+        "metric": "speed-index",
+        "budget": 3000
+      },
+      {
+        "metric": "cumulative-layout-shift",
+        "budget": 0.1
+      },
+      {
+        "metric": "max-potential-fid",
+        "budget": 100
+      }
+    ]
+  },
+  {
+    "path": "/browse",
+    "resourceSizes": [
+      {
+        "resourceType": "script",
+        "budget": 450
+      },
+      {
+        "resourceType": "image",
+        "budget": 800
+      },
+      {
+        "resourceType": "total",
+        "budget": 1500
+      }
+    ],
+    "timings": [
+      {
+        "metric": "first-contentful-paint",
+        "budget": 2500
+      },
+      {
+        "metric": "largest-contentful-paint",
+        "budget": 3000
+      }
+    ]
+  },
+  {
+    "path": "/dashboard",
+    "resourceSizes": [
+      {
+        "resourceType": "script",
+        "budget": 500
+      },
+      {
+        "resourceType": "total",
+        "budget": 1600
+      }
+    ],
+    "timings": [
+      {
+        "metric": "first-contentful-paint",
+        "budget": 2500
+      },
+      {
+        "metric": "largest-contentful-paint",
+        "budget": 3000
+      }
+    ]
+  }
+]

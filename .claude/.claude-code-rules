@@ -1,0 +1,549 @@
+---
+name: enterprise-saas-rules
+version: 1.0.0
+description: Comprehensive rules for Next.js 15.4 multi-tenant SaaS marketplace development
+last_updated: 2024-01-20
+---
+
+# ============================================
+# CORE DEVELOPMENT RULES
+# ============================================
+
+## 1. CODE GENERATION STANDARDS
+
+### Always Generate Complete Files
+- Generate complete, runnable files - never snippets
+- Include all necessary imports and exports
+- Ensure files are immediately executable
+- Add barrel exports (index files) automatically
+
+### Automatic Execution
+- Proceed automatically with code generation
+- Do not ask for confirmation unless critical decision point
+- Update existing files when improving/fixing
+- Create new files when adding features
+
+### File Naming Conventions
+- Components: PascalCase (e.g., `UserDashboard.tsx`)
+- Pages: PascalCase (e.g., `Dashboard.tsx`)
+- Utilities: camelCase (e.g., `formatDate.ts`)
+- Hooks: camelCase with 'use' prefix (e.g., `useAuth.ts`)
+- Services: camelCase (e.g., `organizationService.ts`)
+- Types: PascalCase (e.g., `UserTypes.ts`)
+- Constants: UPPER_SNAKE_CASE in files named camelCase (e.g., `constants.ts`)
+
+## 2. TYPESCRIPT STANDARDS
+
+### Type Safety Rules
+```typescript
+// NEVER use 'any' type
+// ❌ WRONG
+const data: any = fetchData();
+
+// ✅ CORRECT
+interface UserData {
+  id: string;
+  name: string;
+  role: Role;
+}
+const data: UserData = fetchData();
+```
+
+### Type Definition Strategy
+- Create explicit interfaces for all data structures
+- Use type inference where obvious
+- Export shared types from `/types` directory
+- Separate type files for large interfaces
+- Inline simple types, extract complex ones
+
+### Strict TypeScript Configuration
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true
+  }
+}
+```
+
+## 3. PROJECT STRUCTURE ENFORCEMENT
+
+### Mandatory Directory Structure
+```
+/src
+  /app                       # Next.js 15.4 App Router
+    /(auth)                  # Auth group routes
+      /sign-in
+      /sign-up
+      /onboarding
+    /(dashboard)             # Protected routes
+      /organizations         # Organization routes
+      /subsidiaries         # Subsidiary routes
+      /channel-partners     # Channel partner routes
+    /api                    # API Routes
+      /v1                   # Versioned APIs
+        /auth
+        /organizations
+        /subsidiaries
+        /channel-partners
+        /webhooks
+    
+  /components
+    /features               # Feature-specific components
+      /organizations
+      /subsidiaries
+      /channel-partners
+      /marketplace
+    /shared                 # Reusable components
+      /ui                   # ShadCN components
+      /forms
+      /layouts
+      /charts
+      
+  /lib                      # Core libraries
+    /firebase
+    /clerk
+    /api
+    
+  /services                 # Business logic
+    /authService.ts
+    /organizationService.ts
+    /marketplaceService.ts
+    
+  /hooks                    # Custom React hooks
+    /useAuth.ts
+    /useOrganization.ts
+    /useTenant.ts
+    
+  /utils                    # Utility functions
+    /validators
+    /formatters
+    /constants
+    
+  /types                    # TypeScript definitions
+    /models
+    /api
+    /database
+    
+  /tests                    # All tests
+    /unit
+    /integration
+    /e2e
+```
+
+## 4. COMPONENT DEVELOPMENT RULES
+
+### Component Structure
+```typescript
+// Every component MUST follow this structure:
+
+import { Suspense } from 'react';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
+
+// Types
+interface ComponentProps {
+  // Explicit prop types - no 'any'
+}
+
+// Component with error boundary and loading state
+export default function ComponentName({ props }: ComponentProps) {
+  return (
+    <ErrorBoundary fallback={<ErrorFallback />}>
+      <Suspense fallback={<LoadingSpinner />}>
+        <ActualComponent {...props} />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+### Multi-Tenant Context Check
+```typescript
+// Every component accessing data MUST check tenant context
+import { useTenant } from '@/hooks/useTenant';
+
+function Component() {
+  const { currentTenant, tenantType, permissions } = useTenant();
+  
+  // Always verify tenant access
+  if (!permissions.canAccess('resource')) {
+    return <AccessDenied />;
+  }
+  
+  // Component logic...
+}
+```
+
+## 5. API DEVELOPMENT RULES
+
+### API Route Structure
+```typescript
+// Every API route MUST include:
+
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { withAuth } from '@/lib/middleware/auth';
+import { withRateLimit } from '@/lib/middleware/rateLimit';
+import { withTenant } from '@/lib/middleware/tenant';
+import { logger } from '@/lib/logger';
+
+// Input validation schema
+const requestSchema = z.object({
+  // Define all inputs
+});
+
+async function handler(req: NextRequest) {
+  try {
+    // 1. Validate input
+    const validated = requestSchema.parse(await req.json());
+    
+    // 2. Check tenant context
+    const tenant = await getTenant(req);
+    
+    // 3. Verify permissions
+    if (!tenant.can('action')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    
+    // 4. Business logic
+    const result = await businessLogic(validated, tenant);
+    
+    // 5. Audit log
+    await logAction(tenant, 'action', result);
+    
+    // 6. Return response
+    return NextResponse.json(result);
+    
+  } catch (error) {
+    logger.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' }, 
+      { status: 500 }
+    );
+  }
+}
+
+// Apply middleware
+export const GET = withAuth(withRateLimit(withTenant(handler)));
+```
+
+## 6. STATE MANAGEMENT RULES
+
+### Zustand Store Pattern
+```typescript
+// stores/organizationStore.ts
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+
+interface OrganizationState {
+  organizations: Organization[];
+  loading: boolean;
+  error: Error | null;
+  // Actions
+  fetchOrganizations: () => Promise<void>;
+  addOrganization: (org: Organization) => void;
+  updateOrganization: (id: string, data: Partial<Organization>) => void;
+}
+
+export const useOrganizationStore = create<OrganizationState>()(
+  devtools(
+    (set) => ({
+      organizations: [],
+      loading: false,
+      error: null,
+      // Implement actions with proper error handling
+    }),
+    { name: 'organization-store' }
+  )
+);
+```
+
+## 7. SECURITY RULES
+
+### Environment Variables
+```typescript
+// ALWAYS use environment variables for sensitive data
+// NEVER hardcode secrets
+
+// ❌ WRONG
+const apiKey = "sk-1234567890";
+
+// ✅ CORRECT
+const apiKey = process.env.API_KEY;
+
+// Validate environment variables at startup
+if (!process.env.API_KEY) {
+  throw new Error('API_KEY environment variable is required');
+}
+```
+
+### API Security Checklist
+- [ ] Input validation on ALL endpoints
+- [ ] Rate limiting enabled
+- [ ] Authentication required
+- [ ] RBAC permissions checked
+- [ ] Tenant isolation verified
+- [ ] CORS properly configured
+- [ ] SQL injection prevention
+- [ ] XSS protection enabled
+
+## 8. TESTING RULES
+
+### Test Requirements
+- Generate tests for EVERY component and function
+- Tests in separate `/tests` directory
+- Minimum 80% code coverage
+- Test file naming: `ComponentName.test.tsx`
+
+### Test Structure
+```typescript
+// tests/unit/components/OrganizationList.test.tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import { OrganizationList } from '@/components/features/organizations/OrganizationList';
+
+describe('OrganizationList', () => {
+  // Test multi-tenant scenarios
+  it('should show only tenant-specific organizations', async () => {
+    // Test implementation
+  });
+  
+  // Test permissions
+  it('should respect RBAC permissions', () => {
+    // Test implementation
+  });
+  
+  // Test error states
+  it('should handle errors gracefully', () => {
+    // Test implementation
+  });
+});
+```
+
+## 9. PERFORMANCE RULES
+
+### Mandatory Optimizations
+```typescript
+// 1. Lazy load all routes
+const Dashboard = lazy(() => import('./Dashboard'));
+
+// 2. Implement loading states
+<Suspense fallback={<LoadingSpinner />}>
+  <Dashboard />
+</Suspense>
+
+// 3. Handle 404s
+export function NotFound() {
+  return <Custom404Page />;
+}
+
+// 4. Add performance monitoring
+import { reportWebVitals } from '@/lib/monitoring';
+
+// 5. Optimize images
+import Image from 'next/image';
+<Image src="/image.png" alt="Description" width={500} height={300} loading="lazy" />
+```
+
+## 10. GIT WORKFLOW RULES
+
+### Branch Naming
+```bash
+feature/add-organization-management
+fix/tenant-isolation-issue
+refactor/api-structure
+docs/update-readme
+```
+
+### Commit Message Format
+```bash
+type(scope): description
+
+# Types: feat, fix, docs, style, refactor, test, chore
+# Example:
+feat(organizations): add multi-tenant support for organization creation
+fix(auth): resolve RBAC permission checking issue
+```
+
+### Automatic Actions
+- Create feature branch for new work
+- Generate descriptive commit messages
+- Run tests before committing
+- Build project to verify no errors
+- Update documentation when APIs change
+
+## 11. DEPENDENCY MANAGEMENT
+
+### Auto-Management Rules
+- Automatically add required dependencies to package.json
+- Alert on security vulnerabilities
+- Use exact versions for critical dependencies
+- Update patch versions automatically
+- Request approval for major version updates
+
+### Approved Dependencies
+```json
+{
+  "dependencies": {
+    "next": "15.4.x",
+    "react": "^18.0.0",
+    "firebase": "^10.0.0",
+    "@clerk/nextjs": "latest",
+    "zustand": "^4.0.0",
+    "@tanstack/react-query": "^5.0.0",
+    "zod": "^3.0.0",
+    "react-hook-form": "^7.0.0",
+    "@radix-ui/react-*": "latest",
+    "tailwindcss": "^3.0.0"
+  }
+}
+```
+
+## 12. ERROR HANDLING RULES
+
+### Global Error Handling
+```typescript
+// app/error.tsx
+'use client';
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  // Log to monitoring service
+  logError(error);
+  
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+## 13. DOCUMENTATION RULES
+
+### Auto-Generated Documentation
+- API documentation updates on endpoint changes
+- Component prop documentation via JSDoc
+- README updates for new features
+- Changelog maintenance
+
+### Code Documentation Standard
+```typescript
+/**
+ * Creates a new organization with multi-tenant support
+ * @param data - Organization creation data
+ * @param tenantId - Current tenant identifier
+ * @returns Newly created organization
+ * @throws {ValidationError} If data is invalid
+ * @throws {PermissionError} If user lacks permission
+ */
+async function createOrganization(
+  data: CreateOrganizationDto,
+  tenantId: string
+): Promise<Organization> {
+  // Implementation
+}
+```
+
+## 14. MULTI-TENANT RULES
+
+### Tenant Isolation Enforcement
+```typescript
+// Every database query MUST include tenant filter
+const organizations = await db
+  .collection('organizations')
+  .where('tenantId', '==', currentTenant.id)
+  .get();
+
+// Every API response MUST be filtered by tenant
+const filteredData = data.filter(item => 
+  tenantCanAccess(currentTenant, item)
+);
+```
+
+## 15. MONITORING & LOGGING RULES
+
+### Mandatory Monitoring Points
+```typescript
+// Performance monitoring
+reportWebVitals(metric => {
+  analytics.track('Web Vitals', metric);
+});
+
+// Error tracking
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV,
+  tracesSampleRate: 1.0,
+});
+
+// Custom metrics
+trackMetric('api.response.time', responseTime);
+trackMetric('tenant.actions', { tenantId, action });
+```
+
+## 16. AGENT INTERACTION RULES
+
+### Agent Coordination
+- Agents may modify other agents' outputs for consistency
+- Conflicts resolved by Coordinator Agent
+- Each agent validates previous agent's work
+- Human approval required at key checkpoints
+
+## 17. QUALITY GATES
+
+### Pre-Commit Checks
+- [ ] TypeScript compilation passes
+- [ ] ESLint rules pass (with necessary disables)
+- [ ] Tests pass
+- [ ] No 'any' types used
+- [ ] Tenant context verified
+- [ ] Error boundaries present
+- [ ] Loading states implemented
+
+## 18. ENFORCEMENT PRIORITY
+
+## Strict Rules (Never Violate)
+1. No 'any' types
+2. Multi-tenant isolation
+3. Security measures
+4. Input validation
+5. Environment variables for secrets
+
+## Flexible Rules (Best Effort)
+1. Documentation completeness
+2. Test coverage percentage
+3. Performance optimizations
+4. Code style preferences
+
+## Human Approval Required
+1. Major architecture changes
+2. New external dependencies
+3. Security-critical updates
+4. Production deployments
+5. Database schema changes
+
+# ============================================
+# USAGE INSTRUCTIONS
+# ============================================
+
+1. Place this file as `.claude-code-rules` in project root
+2. All agents must load and follow these rules
+3. Coordinator Agent enforces rule compliance
+4. Update version number when rules change
+5. Review rules monthly for improvements
+
+Version: 1.0.0
+Last Updated: 2024-01-20
+Next Review: 2024-02-20

@@ -1,0 +1,32 @@
+{
+  "projects": {
+    "development": "ai-marketplace-dev",
+    "staging": "ai-marketplace-staging",
+    "production": "ai-marketplace-prod"
+  },
+  "targets": {
+    "ai-marketplace-dev": {
+      "hosting": {
+        "dev": [
+          "ai-marketplace-dev"
+        ]
+      }
+    },
+    "ai-marketplace-staging": {
+      "hosting": {
+        "staging": [
+          "ai-marketplace-staging"
+        ]
+      }
+    },
+    "ai-marketplace-prod": {
+      "hosting": {
+        "prod": [
+          "ai-marketplace-prod"
+        ]
+      }
+    }
+  },
+  "etags": {},
+  "dataconnectEmulatorConfig": {}
+}
