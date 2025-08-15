@@ -1,0 +1,1 @@
+All forms must use CustomFormField from /components/CustomFormFields.tsx as specified in shared-components-spec.md. No custom form inputs allowed.

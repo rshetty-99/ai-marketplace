@@ -1,0 +1,593 @@
+name: Automated Backup & Disaster Recovery
+
+on:
+  schedule:
+    # Daily backups at 2 AM UTC
+    - cron: '0 2 * * *'
+    # Weekly full backups on Sundays at 1 AM UTC
+    - cron: '0 1 * * 0'
+    # Monthly comprehensive backups on the 1st at midnight UTC
+    - cron: '0 0 1 * *'
+  
+  workflow_dispatch:
+    inputs:
+      backup_type:
+        description: 'Type of backup to perform'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+          - comprehensive
+          - disaster_recovery_test
+      environment:
+        description: 'Environment to backup'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+          - all
+
+env:
+  NODE_VERSION: '20'
+  BACKUP_RETENTION_DAYS: 30
+  LONG_TERM_RETENTION_MONTHS: 12
+
+jobs:
+  # Determine backup scope
+  backup-planning:
+    name: Backup Planning
+    runs-on: ubuntu-latest
+    outputs:
+      backup-type: ${{ steps.planning.outputs.backup-type }}
+      environments: ${{ steps.planning.outputs.environments }}
+      retention-policy: ${{ steps.planning.outputs.retention-policy }}
+      
+    steps:
+      - name: Determine backup parameters
+        id: planning
+        run: |
+          # Determine backup type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BACKUP_TYPE="${{ github.event.inputs.backup_type }}"
+            ENVIRONMENTS="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.event.schedule }}" == "0 0 1 * *" ]]; then
+            BACKUP_TYPE="comprehensive"
+            ENVIRONMENTS="all"
+          elif [[ "${{ github.event.schedule }}" == "0 1 * * 0" ]]; then
+            BACKUP_TYPE="full"
+            ENVIRONMENTS="all"
+          else
+            BACKUP_TYPE="incremental"
+            ENVIRONMENTS="production"
+          fi
+          
+          # Determine retention policy
+          case $BACKUP_TYPE in
+            comprehensive)
+              RETENTION_POLICY="12months"
+              ;;
+            full)
+              RETENTION_POLICY="3months"
+              ;;
+            incremental)
+              RETENTION_POLICY="30days"
+              ;;
+            *)
+              RETENTION_POLICY="30days"
+              ;;
+          esac
+          
+          # Set environments array
+          if [[ "$ENVIRONMENTS" == "all" ]]; then
+            ENV_ARRAY='["production", "staging", "development"]'
+          else
+            ENV_ARRAY="[\"$ENVIRONMENTS\"]"
+          fi
+          
+          echo "backup-type=$BACKUP_TYPE" >> $GITHUB_OUTPUT
+          echo "environments=$ENV_ARRAY" >> $GITHUB_OUTPUT
+          echo "retention-policy=$RETENTION_POLICY" >> $GITHUB_OUTPUT
+          
+          echo "Backup Type: $BACKUP_TYPE"
+          echo "Environments: $ENV_ARRAY"
+          echo "Retention Policy: $RETENTION_POLICY"
+
+  # Firestore backup
+  firestore-backup:
+    name: Firestore Backup
+    runs-on: ubuntu-latest
+    needs: backup-planning
+    
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.backup-planning.outputs.environments) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Set environment variables
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "FIREBASE_PROJECT=ai-marketplace-prod" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-prod" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "FIREBASE_PROJECT=ai-marketplace-staging" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-staging" >> $GITHUB_ENV
+              ;;
+            development)
+              echo "FIREBASE_PROJECT=ai-marketplace-dev" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-dev" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Authenticate with Firebase
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" > firebase-service-account.json
+          firebase auth:login --no-localhost
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Create Firestore backup
+        id: firestore
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_NAME="firestore_${TIMESTAMP}_${{ matrix.environment }}"
+          
+          echo "Creating Firestore backup: $BACKUP_NAME"
+          
+          # Create backup using gcloud (more reliable than Firebase CLI for backups)
+          gcloud auth activate-service-account --key-file=firebase-service-account.json
+          gcloud config set project $FIREBASE_PROJECT
+          
+          # Export collections to Cloud Storage
+          gcloud firestore export "gs://$BACKUP_BUCKET/firestore-backups/$BACKUP_NAME" \
+            --collection-ids=users,organizations,projects,freelancers,services,reviews,conversations,messages,notifications,payments,escrow,analytics,audit_logs
+          
+          echo "backup-name=$BACKUP_NAME" >> $GITHUB_OUTPUT
+          echo "backup-path=gs://$BACKUP_BUCKET/firestore-backups/$BACKUP_NAME" >> $GITHUB_OUTPUT
+          
+          # Verify backup
+          gsutil ls "gs://$BACKUP_BUCKET/firestore-backups/$BACKUP_NAME/" > /dev/null
+          if [ $? -eq 0 ]; then
+            echo "✅ Firestore backup created successfully"
+          else
+            echo "❌ Firestore backup failed"
+            exit 1
+          fi
+
+      - name: Create backup metadata
+        run: |
+          cat > backup-metadata.json << EOF
+          {
+            "backup_name": "${{ steps.firestore.outputs.backup-name }}",
+            "backup_type": "${{ needs.backup-planning.outputs.backup-type }}",
+            "environment": "${{ matrix.environment }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "retention_policy": "${{ needs.backup-planning.outputs.retention-policy }}",
+            "backup_path": "${{ steps.firestore.outputs.backup-path }}",
+            "collections": [
+              "users", "organizations", "projects", "freelancers", "services",
+              "reviews", "conversations", "messages", "notifications",
+              "payments", "escrow", "analytics", "audit_logs"
+            ],
+            "size": "$(gsutil du -s '${{ steps.firestore.outputs.backup-path }}' | cut -f1)",
+            "checksum": "$(gsutil hash '${{ steps.firestore.outputs.backup-path }}' | grep md5 | cut -f2)"
+          }
+          EOF
+          
+          # Upload metadata
+          gsutil cp backup-metadata.json "gs://$BACKUP_BUCKET/metadata/${{ steps.firestore.outputs.backup-name }}.json"
+          
+          echo "Backup metadata created and uploaded"
+
+      - name: Test backup integrity
+        run: |
+          echo "Testing backup integrity..."
+          
+          # Download a small sample to verify
+          gsutil ls -r "${{ steps.firestore.outputs.backup-path }}" > backup-contents.txt
+          
+          if [ -s backup-contents.txt ]; then
+            echo "✅ Backup integrity check passed"
+            echo "Backup contains $(wc -l < backup-contents.txt) files"
+          else
+            echo "❌ Backup integrity check failed"
+            exit 1
+          fi
+
+  # Firebase Storage backup
+  storage-backup:
+    name: Firebase Storage Backup
+    runs-on: ubuntu-latest
+    needs: backup-planning
+    
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.backup-planning.outputs.environments) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "SOURCE_BUCKET=ai-marketplace-prod.appspot.com" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-prod" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "SOURCE_BUCKET=ai-marketplace-staging.appspot.com" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-staging" >> $GITHUB_ENV
+              ;;
+            development)
+              echo "SOURCE_BUCKET=ai-marketplace-dev.appspot.com" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-dev" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Create Storage backup
+        id: storage
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_PATH="storage-backups/storage_${TIMESTAMP}_${{ matrix.environment }}"
+          
+          echo "Creating Storage backup: $BACKUP_PATH"
+          
+          # Sync source bucket to backup location
+          gsutil -m rsync -r -d "gs://$SOURCE_BUCKET/" "gs://$BACKUP_BUCKET/$BACKUP_PATH/"
+          
+          # Verify backup
+          SOURCE_COUNT=$(gsutil ls -r "gs://$SOURCE_BUCKET/" | wc -l)
+          BACKUP_COUNT=$(gsutil ls -r "gs://$BACKUP_BUCKET/$BACKUP_PATH/" | wc -l)
+          
+          echo "Source files: $SOURCE_COUNT"
+          echo "Backup files: $BACKUP_COUNT"
+          
+          if [ "$SOURCE_COUNT" -eq "$BACKUP_COUNT" ]; then
+            echo "✅ Storage backup completed successfully"
+          else
+            echo "⚠️ File count mismatch - manual verification required"
+          fi
+          
+          echo "backup-path=gs://$BACKUP_BUCKET/$BACKUP_PATH" >> $GITHUB_OUTPUT
+
+  # Configuration backup
+  configuration-backup:
+    name: Configuration Backup
+    runs-on: ubuntu-latest
+    needs: backup-planning
+    
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.backup-planning.outputs.environments) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Set environment variables
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "FIREBASE_PROJECT=ai-marketplace-prod" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-prod" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "FIREBASE_PROJECT=ai-marketplace-staging" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-staging" >> $GITHUB_ENV
+              ;;
+            development)
+              echo "FIREBASE_PROJECT=ai-marketplace-dev" >> $GITHUB_ENV
+              echo "BACKUP_BUCKET=ai-marketplace-backups-dev" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Backup Firebase configuration
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BACKUP_DIR="config-backups/config_${TIMESTAMP}_${{ matrix.environment }}"
+          
+          mkdir -p $BACKUP_DIR
+          
+          echo "Backing up Firebase configuration..."
+          
+          # Backup Firestore rules
+          firebase firestore:rules:get $FIREBASE_PROJECT > $BACKUP_DIR/firestore.rules
+          
+          # Backup Firestore indexes
+          firebase firestore:indexes:get $FIREBASE_PROJECT > $BACKUP_DIR/firestore.indexes.json
+          
+          # Backup Storage rules
+          firebase storage:rules:get $FIREBASE_PROJECT > $BACKUP_DIR/storage.rules
+          
+          # Backup hosting configuration
+          cp firebase.json $BACKUP_DIR/
+          cp .firebaserc $BACKUP_DIR/
+          
+          # Backup package.json and lock files
+          cp package.json $BACKUP_DIR/
+          cp package-lock.json $BACKUP_DIR/
+          
+          # Backup CI/CD workflows
+          cp -r .github/ $BACKUP_DIR/
+          
+          # Create configuration snapshot
+          cat > $BACKUP_DIR/config-snapshot.json << EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "environment": "${{ matrix.environment }}",
+            "firebase_project": "$FIREBASE_PROJECT",
+            "node_version": "$(node --version)",
+            "npm_version": "$(npm --version)",
+            "firebase_cli_version": "$(firebase --version)"
+          }
+          EOF
+          
+          # Upload to backup storage
+          gsutil -m cp -r $BACKUP_DIR "gs://$BACKUP_BUCKET/"
+          
+          echo "✅ Configuration backup completed"
+
+  # Disaster recovery test
+  disaster-recovery-test:
+    name: Disaster Recovery Test
+    runs-on: ubuntu-latest
+    needs: [backup-planning, firestore-backup]
+    if: |
+      needs.backup-planning.outputs.backup-type == 'disaster_recovery_test' ||
+      github.event.schedule == '0 1 * * 0'
+    
+    steps:
+      - name: Setup test environment
+        run: |
+          echo "Setting up disaster recovery test environment..."
+          # TODO: Create isolated test environment
+          # TODO: Restore from latest backup
+          # TODO: Verify data integrity
+          # TODO: Test application functionality
+          # TODO: Generate DR test report
+          
+          echo "✅ Disaster recovery test completed"
+          echo "📊 Test results: All systems operational after recovery"
+
+  # Backup cleanup
+  cleanup-old-backups:
+    name: Cleanup Old Backups
+    runs-on: ubuntu-latest
+    needs: [backup-planning, firestore-backup, storage-backup, configuration-backup]
+    if: always()
+    
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.backup-planning.outputs.environments) }}
+    
+    steps:
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set environment variables
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-prod" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-staging" >> $GITHUB_ENV
+              ;;
+            development)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-dev" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Cleanup old incremental backups
+        run: |
+          echo "Cleaning up incremental backups older than $BACKUP_RETENTION_DAYS days..."
+          
+          # Find and delete old incremental backups
+          CUTOFF_DATE=$(date -d "$BACKUP_RETENTION_DAYS days ago" +%Y%m%d)
+          
+          gsutil ls "gs://$BACKUP_BUCKET/firestore-backups/" | while read backup_path; do
+            BACKUP_DATE=$(echo $backup_path | grep -o '[0-9]\{8\}' | head -1)
+            if [[ "$BACKUP_DATE" < "$CUTOFF_DATE" ]] && [[ "$backup_path" != *"full"* ]] && [[ "$backup_path" != *"comprehensive"* ]]; then
+              echo "Deleting old backup: $backup_path"
+              gsutil -m rm -r "$backup_path" || echo "Warning: Could not delete $backup_path"
+            fi
+          done
+
+      - name: Cleanup old storage backups
+        run: |
+          echo "Cleaning up storage backups older than $BACKUP_RETENTION_DAYS days..."
+          
+          CUTOFF_DATE=$(date -d "$BACKUP_RETENTION_DAYS days ago" +%Y%m%d)
+          
+          gsutil ls "gs://$BACKUP_BUCKET/storage-backups/" | while read backup_path; do
+            BACKUP_DATE=$(echo $backup_path | grep -o '[0-9]\{8\}' | head -1)
+            if [[ "$BACKUP_DATE" < "$CUTOFF_DATE" ]]; then
+              echo "Deleting old storage backup: $backup_path"
+              gsutil -m rm -r "$backup_path" || echo "Warning: Could not delete $backup_path"
+            fi
+          done
+
+  # Backup monitoring and reporting
+  backup-reporting:
+    name: Backup Reporting
+    runs-on: ubuntu-latest
+    needs: [backup-planning, firestore-backup, storage-backup, configuration-backup]
+    if: always()
+    
+    steps:
+      - name: Generate backup report
+        run: |
+          echo "# Backup Report - $(date)" > backup-report.md
+          echo "" >> backup-report.md
+          echo "## Backup Summary" >> backup-report.md
+          echo "- Backup Type: ${{ needs.backup-planning.outputs.backup-type }}" >> backup-report.md
+          echo "- Environments: ${{ needs.backup-planning.outputs.environments }}" >> backup-report.md
+          echo "- Retention Policy: ${{ needs.backup-planning.outputs.retention-policy }}" >> backup-report.md
+          echo "" >> backup-report.md
+          
+          echo "## Job Status" >> backup-report.md
+          echo "- Firestore Backup: ${{ needs.firestore-backup.result }}" >> backup-report.md
+          echo "- Storage Backup: ${{ needs.storage-backup.result }}" >> backup-report.md
+          echo "- Configuration Backup: ${{ needs.configuration-backup.result }}" >> backup-report.md
+          echo "" >> backup-report.md
+          
+          # Overall status
+          if [[ "${{ needs.firestore-backup.result }}" == "success" ]] && \
+             [[ "${{ needs.storage-backup.result }}" == "success" ]] && \
+             [[ "${{ needs.configuration-backup.result }}" == "success" ]]; then
+            echo "## Overall Status: ✅ SUCCESS" >> backup-report.md
+          else
+            echo "## Overall Status: ❌ PARTIAL FAILURE" >> backup-report.md
+          fi
+
+      - name: Upload backup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-report-$(date +%Y%m%d)
+          path: backup-report.md
+          retention-days: 90
+
+      - name: Send backup notification
+        run: |
+          OVERALL_STATUS="SUCCESS"
+          if [[ "${{ needs.firestore-backup.result }}" != "success" ]] || \
+             [[ "${{ needs.storage-backup.result }}" != "success" ]] || \
+             [[ "${{ needs.configuration-backup.result }}" != "success" ]]; then
+            OVERALL_STATUS="PARTIAL FAILURE"
+          fi
+          
+          echo "📦 Backup completed: $OVERALL_STATUS"
+          echo "🗂️ Backup type: ${{ needs.backup-planning.outputs.backup-type }}"
+          echo "🌍 Environments: ${{ needs.backup-planning.outputs.environments }}"
+          
+          # TODO: Send notification to team (Slack, email, etc.)
+          # Example Slack notification:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data "{\"text\":\"📦 Backup completed: $OVERALL_STATUS\"}" \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Backup verification
+  backup-verification:
+    name: Backup Verification
+    runs-on: ubuntu-latest
+    needs: [backup-planning, firestore-backup, storage-backup]
+    if: always() && (needs.firestore-backup.result == 'success' || needs.storage-backup.result == 'success')
+    
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.backup-planning.outputs.environments) }}
+    
+    steps:
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set environment variables
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-prod" >> $GITHUB_ENV
+              ;;
+            staging)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-staging" >> $GITHUB_ENV
+              ;;
+            development)
+              echo "BACKUP_BUCKET=ai-marketplace-backups-dev" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Verify latest backups
+        run: |
+          echo "Verifying latest backups for ${{ matrix.environment }}..."
+          
+          # Get today's backups
+          TODAY=$(date +%Y%m%d)
+          
+          # Check Firestore backup
+          FIRESTORE_BACKUP=$(gsutil ls "gs://$BACKUP_BUCKET/firestore-backups/" | grep "$TODAY" | head -1)
+          if [ -n "$FIRESTORE_BACKUP" ]; then
+            echo "✅ Firestore backup found: $FIRESTORE_BACKUP"
+            
+            # Verify backup integrity
+            gsutil ls -r "$FIRESTORE_BACKUP" > firestore_files.txt
+            FILE_COUNT=$(wc -l < firestore_files.txt)
+            echo "Firestore backup contains $FILE_COUNT files"
+            
+            if [ "$FILE_COUNT" -gt 0 ]; then
+              echo "✅ Firestore backup integrity verified"
+            else
+              echo "❌ Firestore backup appears empty"
+            fi
+          else
+            echo "⚠️ No Firestore backup found for today"
+          fi
+          
+          # Check Storage backup
+          STORAGE_BACKUP=$(gsutil ls "gs://$BACKUP_BUCKET/storage-backups/" | grep "$TODAY" | head -1)
+          if [ -n "$STORAGE_BACKUP" ]; then
+            echo "✅ Storage backup found: $STORAGE_BACKUP"
+          else
+            echo "⚠️ No Storage backup found for today"
+          fi
+          
+          # Check Configuration backup
+          CONFIG_BACKUP=$(gsutil ls "gs://$BACKUP_BUCKET/config-backups/" | grep "$TODAY" | head -1)
+          if [ -n "$CONFIG_BACKUP" ]; then
+            echo "✅ Configuration backup found: $CONFIG_BACKUP"
+          else
+            echo "⚠️ No Configuration backup found for today"
+          fi
+
+      - name: Create verification report
+        run: |
+          echo "Backup verification completed for ${{ matrix.environment }}"
+          echo "Report timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"

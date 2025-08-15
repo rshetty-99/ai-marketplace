@@ -1,0 +1,516 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [main, develop, staging]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  NODE_VERSION: '20'
+  FIREBASE_CLI_EXPERIMENTS: webframeworks
+
+jobs:
+  # Skip draft PRs
+  check-draft:
+    name: Check if PR is ready
+    runs-on: ubuntu-latest
+    outputs:
+      is-draft: ${{ steps.draft-check.outputs.is-draft }}
+    steps:
+      - name: Check if PR is draft
+        id: draft-check
+        run: |
+          if [[ "${{ github.event.pull_request.draft }}" == "true" ]]; then
+            echo "is-draft=true" >> $GITHUB_OUTPUT
+            echo "PR is in draft state, skipping checks"
+          else
+            echo "is-draft=false" >> $GITHUB_OUTPUT
+            echo "PR is ready for review"
+          fi
+
+  # Code quality checks
+  lint-and-format:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint -- --format=@microsoft/eslint-formatter-sarif --output-file=eslint-results.sarif
+        continue-on-error: true
+
+      - name: Upload ESLint results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: eslint-results.sarif
+          wait-for-processing: true
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: TypeScript type checking
+        run: npm run type-check
+
+  # Security and dependency checks
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate --json > audit-results.json || true
+          if [ -s audit-results.json ]; then
+            echo "Security vulnerabilities found:"
+            cat audit-results.json | jq '.vulnerabilities | keys[] as $k | "\(.[$k].severity): \(.[$k].title)"'
+          fi
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json-file-output=snyk-results.json
+        continue-on-error: true
+
+      - name: Upload Snyk results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # Testing suite
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    services:
+      firebase:
+        image: firebase/firebase-tools:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Firebase emulators
+        run: |
+          npm install -g firebase-tools
+          firebase emulators:start --only auth,firestore,storage &
+          sleep 15
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Run unit tests with coverage
+        run: npm run test:unit:coverage
+        env:
+          CI: true
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          CI: true
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests (critical paths only)
+        run: npm run test:e2e -- --grep="critical|smoke"
+        env:
+          CI: true
+
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit tests: $(npm run test:unit:coverage 2>&1 | grep -o '[0-9]\+% Statements' | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration tests: Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- E2E tests (critical): Completed" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-pr-${{ github.event.pull_request.number }}
+          path: |
+            coverage/
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+      - name: Comment coverage report
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lcov-file: ./coverage/lcov.info
+          delete-old-comments: true
+
+  # Build verification
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: check-draft
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    strategy:
+      matrix:
+        environment: [development, staging]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for ${{ matrix.environment }}
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ai-marketplace-${{ matrix.environment }}
+
+      - name: Check bundle size
+        run: |
+          BUNDLE_SIZE=$(du -sh .next/static | cut -f1)
+          echo "Bundle size: $BUNDLE_SIZE"
+          echo "## Bundle Analysis (${{ matrix.environment }})" >> $GITHUB_STEP_SUMMARY
+          echo "- Total bundle size: $BUNDLE_SIZE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Analyze bundle
+        run: npm run analyze
+        env:
+          ANALYZE: true
+
+  # Performance regression testing
+  performance:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    needs: [check-draft, build]
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+        env:
+          NODE_ENV: production
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli
+          lhci autorun --config=.lighthouserc-pr.json
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Comment performance results
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          configPath: .lighthouserc-pr.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  # Accessibility testing
+  accessibility:
+    name: Accessibility Check
+    runs-on: ubuntu-latest
+    needs: [check-draft, build]
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run accessibility tests
+        run: npm run test:a11y
+        env:
+          CI: true
+
+      - name: Upload accessibility results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessibility-results-pr-${{ github.event.pull_request.number }}
+          path: accessibility-report/
+          retention-days: 7
+
+  # Preview deployment
+  preview-deploy:
+    name: Preview Deployment
+    runs-on: ubuntu-latest
+    needs: [check-draft, lint-and-format, test, build]
+    if: needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ai-marketplace-staging
+
+      - name: Deploy to Firebase preview channel
+        id: preview
+        run: |
+          npm install -g firebase-tools
+          
+          # Create or update preview channel
+          CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
+          firebase hosting:channel:deploy "$CHANNEL_ID" --project ai-marketplace-staging --expires 7d
+          
+          # Get preview URL
+          PREVIEW_URL=$(firebase hosting:channel:list --project ai-marketplace-staging | grep "$CHANNEL_ID" | awk '{print $3}')
+          echo "url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          
+          echo "Preview deployment completed!"
+          echo "URL: $PREVIEW_URL"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Comment preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const previewUrl = '${{ steps.preview.outputs.url }}';
+            const comment = `## 🚀 Preview Deployment
+            
+            Your changes have been deployed to a preview environment:
+            
+            **📱 Preview URL:** ${previewUrl}
+            
+            This preview will be available for 7 days and will be automatically cleaned up.
+            
+            ### What's included:
+            - ✅ Latest code changes
+            - ✅ Environment: Staging
+            - ✅ All tests passed
+            - ✅ Security scans completed
+            
+            **Note:** This preview uses staging environment configurations and test data.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Auto-merge for dependabot
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, security, test, build]
+    if: |
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.draft == false
+    
+    steps:
+      - name: Auto-merge minor and patch updates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title.toLowerCase();
+            
+            // Only auto-merge minor and patch updates
+            if (title.includes('bump') && (title.includes('minor') || title.includes('patch'))) {
+              github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                event: 'APPROVE'
+              });
+              
+              github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                merge_method: 'squash'
+              });
+            }
+
+  # Summary job
+  pr-check-summary:
+    name: PR Check Summary
+    runs-on: ubuntu-latest
+    needs: [check-draft, lint-and-format, security, test, build, performance, accessibility]
+    if: always() && needs.check-draft.outputs.is-draft == 'false'
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Pull Request Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job statuses
+          if [[ "${{ needs.lint-and-format.result }}" == "success" ]]; then
+            echo "✅ Code Quality - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Code Quality - Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.security.result }}" == "success" ]]; then
+            echo "✅ Security Scan - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Security Scan - Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.test.result }}" == "success" ]]; then
+            echo "✅ Test Suite - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Test Suite - Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.build.result }}" == "success" ]]; then
+            echo "✅ Build Verification - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Build Verification - Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.performance.result }}" == "success" ]]; then
+            echo "✅ Performance Check - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Performance Check - Issues Found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.accessibility.result }}" == "success" ]]; then
+            echo "✅ Accessibility Check - Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Accessibility Check - Issues Found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Ready for review!** 🎉" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check if all required checks passed
+        run: |
+          REQUIRED_JOBS=("lint-and-format" "security" "test" "build")
+          FAILED_JOBS=()
+          
+          for job in "${REQUIRED_JOBS[@]}"; do
+            case $job in
+              "lint-and-format")
+                if [[ "${{ needs.lint-and-format.result }}" != "success" ]]; then
+                  FAILED_JOBS+=($job)
+                fi
+                ;;
+              "security")
+                if [[ "${{ needs.security.result }}" != "success" ]]; then
+                  FAILED_JOBS+=($job)
+                fi
+                ;;
+              "test")
+                if [[ "${{ needs.test.result }}" != "success" ]]; then
+                  FAILED_JOBS+=($job)
+                fi
+                ;;
+              "build")
+                if [[ "${{ needs.build.result }}" != "success" ]]; then
+                  FAILED_JOBS+=($job)
+                fi
+                ;;
+            esac
+          done
+          
+          if [ ${#FAILED_JOBS[@]} -gt 0 ]; then
+            echo "❌ Required checks failed: ${FAILED_JOBS[*]}"
+            exit 1
+          else
+            echo "✅ All required checks passed!"
+          fi

@@ -1,0 +1,17 @@
+{
+  "high": true,
+  "critical": true,
+  "moderate": false,
+  "low": false,
+  "package-manager": "npm",
+  "report-type": "full",
+  "allowlist": [
+    "*|prototype-pollution",
+    "1002|ansi-html",
+    "1179|npm-run-all"
+  ],
+  "skip-dev": false,
+  "path": "./package.json",
+  "output-format": "json",
+  "max-buffer": 1048576
+}

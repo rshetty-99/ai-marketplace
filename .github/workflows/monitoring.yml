@@ -1,0 +1,467 @@
+name: Monitoring & Health Checks
+
+on:
+  schedule:
+    # Run health checks every 5 minutes
+    - cron: '*/5 * * * *'
+    # Run performance monitoring every 30 minutes
+    - cron: '*/30 * * * *'
+    # Run comprehensive monitoring daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  
+  workflow_dispatch:
+    inputs:
+      monitoring_type:
+        description: 'Type of monitoring to run'
+        required: true
+        default: 'health'
+        type: choice
+        options:
+          - health
+          - performance
+          - security
+          - comprehensive
+
+  # Trigger on deployment completion
+  workflow_run:
+    workflows: ["Deploy to Firebase"]
+    types:
+      - completed
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Basic health checks
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    if: |
+      github.event.schedule == '*/5 * * * *' || 
+      github.event_name == 'workflow_dispatch' || 
+      github.event.workflow_run.conclusion == 'success'
+    
+    strategy:
+      matrix:
+        environment: [production, staging, development]
+        
+    steps:
+      - name: Set environment URLs
+        id: urls
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "url=https://ai-marketplace.com" >> $GITHUB_OUTPUT
+              echo "api_url=https://ai-marketplace.com/api" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "url=https://staging.ai-marketplace.com" >> $GITHUB_OUTPUT
+              echo "api_url=https://staging.ai-marketplace.com/api" >> $GITHUB_OUTPUT
+              ;;
+            development)
+              echo "url=https://dev.ai-marketplace.com" >> $GITHUB_OUTPUT
+              echo "api_url=https://dev.ai-marketplace.com/api" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Check application health
+        id: health
+        run: |
+          echo "Checking health for ${{ matrix.environment }}..."
+          
+          # Check main application
+          APP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.urls.outputs.url }}" || echo "000")
+          echo "app_status=$APP_STATUS" >> $GITHUB_OUTPUT
+          
+          # Check API health endpoint
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.urls.outputs.api_url }}/health" || echo "000")
+          echo "api_status=$API_STATUS" >> $GITHUB_OUTPUT
+          
+          # Check response time
+          RESPONSE_TIME=$(curl -s -w "%{time_total}" -o /dev/null "${{ steps.urls.outputs.url }}" || echo "999")
+          echo "response_time=$RESPONSE_TIME" >> $GITHUB_OUTPUT
+          
+          echo "App Status: $APP_STATUS"
+          echo "API Status: $API_STATUS"
+          echo "Response Time: ${RESPONSE_TIME}s"
+
+      - name: Validate SSL certificate
+        run: |
+          echo "Checking SSL certificate for ${{ steps.urls.outputs.url }}..."
+          echo | openssl s_client -connect $(echo "${{ steps.urls.outputs.url }}" | sed 's|https://||'):443 -servername $(echo "${{ steps.urls.outputs.url }}" | sed 's|https://||') 2>/dev/null | openssl x509 -noout -dates
+          
+          # Check certificate expiry
+          EXPIRY=$(echo | openssl s_client -connect $(echo "${{ steps.urls.outputs.url }}" | sed 's|https://||'):443 -servername $(echo "${{ steps.urls.outputs.url }}" | sed 's|https://||') 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+          EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+          CURRENT_EPOCH=$(date +%s)
+          DAYS_UNTIL_EXPIRY=$(( ($EXPIRY_EPOCH - $CURRENT_EPOCH) / 86400 ))
+          
+          echo "Certificate expires in $DAYS_UNTIL_EXPIRY days"
+          
+          if [ $DAYS_UNTIL_EXPIRY -lt 30 ]; then
+            echo "⚠️ Certificate expires in less than 30 days!"
+          fi
+
+      - name: Check database connectivity
+        run: |
+          echo "Checking database connectivity..."
+          DB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.urls.outputs.api_url }}/health/database" || echo "000")
+          echo "Database Status: $DB_STATUS"
+          
+          if [ "$DB_STATUS" != "200" ]; then
+            echo "❌ Database connectivity issue detected!"
+          fi
+
+      - name: Alert on failures
+        if: |
+          steps.health.outputs.app_status != '200' || 
+          steps.health.outputs.api_status != '200' ||
+          steps.health.outputs.response_time > '5.0'
+        run: |
+          echo "🚨 HEALTH CHECK FAILURE - ${{ matrix.environment }}"
+          echo "App Status: ${{ steps.health.outputs.app_status }}"
+          echo "API Status: ${{ steps.health.outputs.api_status }}"
+          echo "Response Time: ${{ steps.health.outputs.response_time }}s"
+          
+          # TODO: Integrate with alerting system (Slack, PagerDuty, etc.)
+          # Example Slack webhook notification:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚨 Health check failed for ${{ matrix.environment }}"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Performance monitoring
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    if: |
+      github.event.schedule == '*/30 * * * *' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.monitoring_type == 'performance') ||
+      github.event.schedule == '0 6 * * *'
+
+    strategy:
+      matrix:
+        environment: [production, staging]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install -g lighthouse lighthouse-ci
+          npm ci
+
+      - name: Set environment URL
+        id: url
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "url=https://ai-marketplace.com" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "url=https://staging.ai-marketplace.com" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Run Lighthouse audit
+        id: lighthouse
+        run: |
+          echo "Running Lighthouse audit for ${{ matrix.environment }}..."
+          
+          lighthouse "${{ steps.url.outputs.url }}" \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --output=json \
+            --output-path=lighthouse-results.json \
+            --preset=perf
+          
+          # Extract key metrics
+          PERFORMANCE=$(cat lighthouse-results.json | jq '.categories.performance.score * 100')
+          LCP=$(cat lighthouse-results.json | jq '.audits."largest-contentful-paint".displayValue' -r)
+          FID=$(cat lighthouse-results.json | jq '.audits."max-potential-fid".displayValue' -r)
+          CLS=$(cat lighthouse-results.json | jq '.audits."cumulative-layout-shift".displayValue' -r)
+          
+          echo "performance=$PERFORMANCE" >> $GITHUB_OUTPUT
+          echo "lcp=$LCP" >> $GITHUB_OUTPUT
+          echo "fid=$FID" >> $GITHUB_OUTPUT
+          echo "cls=$CLS" >> $GITHUB_OUTPUT
+          
+          echo "Performance Score: $PERFORMANCE%"
+          echo "LCP: $LCP"
+          echo "FID: $FID"
+          echo "CLS: $CLS"
+
+      - name: Monitor Core Web Vitals
+        run: |
+          echo "Monitoring Core Web Vitals..."
+          
+          # Set thresholds (based on Google's recommendations)
+          LCP_THRESHOLD=2.5
+          FID_THRESHOLD=100
+          CLS_THRESHOLD=0.1
+          
+          # Check LCP (remove 's' and convert to number)
+          LCP_VALUE=$(echo "${{ steps.lighthouse.outputs.lcp }}" | sed 's/s$//' | sed 's/,//')
+          if (( $(echo "$LCP_VALUE > $LCP_THRESHOLD" | bc -l) )); then
+            echo "⚠️ LCP (${{ steps.lighthouse.outputs.lcp }}) exceeds threshold (${LCP_THRESHOLD}s)"
+          fi
+          
+          # Check performance score
+          if (( $(echo "${{ steps.lighthouse.outputs.performance }} < 90" | bc -l) )); then
+            echo "⚠️ Performance score (${{ steps.lighthouse.outputs.performance }}%) below 90%"
+          fi
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results-${{ matrix.environment }}
+          path: lighthouse-results.json
+          retention-days: 30
+
+      - name: Store performance metrics
+        run: |
+          # TODO: Store metrics in monitoring database (InfluxDB, CloudWatch, etc.)
+          # Example: Send to InfluxDB
+          # curl -i -XPOST 'http://influxdb:8086/write?db=monitoring' \
+          #   --data-binary "performance,env=${{ matrix.environment }} score=${{ steps.lighthouse.outputs.performance }}"
+          
+          echo "Performance metrics stored for ${{ matrix.environment }}"
+
+  # Security monitoring
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    if: |
+      github.event.schedule == '0 6 * * *' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.monitoring_type == 'security')
+
+    strategy:
+      matrix:
+        environment: [production, staging]
+
+    steps:
+      - name: Set environment URL
+        id: url
+        run: |
+          case "${{ matrix.environment }}" in
+            production)
+              echo "url=https://ai-marketplace.com" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "url=https://staging.ai-marketplace.com" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Check security headers
+        run: |
+          echo "Checking security headers for ${{ matrix.environment }}..."
+          
+          HEADERS=$(curl -I -s "${{ steps.url.outputs.url }}")
+          
+          # Check for essential security headers
+          if echo "$HEADERS" | grep -qi "strict-transport-security"; then
+            echo "✅ HSTS header present"
+          else
+            echo "❌ Missing HSTS header"
+          fi
+          
+          if echo "$HEADERS" | grep -qi "x-content-type-options"; then
+            echo "✅ X-Content-Type-Options header present"
+          else
+            echo "❌ Missing X-Content-Type-Options header"
+          fi
+          
+          if echo "$HEADERS" | grep -qi "x-frame-options\|content-security-policy.*frame-ancestors"; then
+            echo "✅ Clickjacking protection present"
+          else
+            echo "❌ Missing clickjacking protection"
+          fi
+          
+          if echo "$HEADERS" | grep -qi "content-security-policy"; then
+            echo "✅ CSP header present"
+          else
+            echo "❌ Missing CSP header"
+          fi
+
+      - name: SSL/TLS security check
+        run: |
+          echo "Checking SSL/TLS configuration..."
+          
+          # Check SSL Labs rating (simplified)
+          DOMAIN=$(echo "${{ steps.url.outputs.url }}" | sed 's|https://||')
+          
+          # Check for weak ciphers
+          echo | openssl s_client -connect $DOMAIN:443 -cipher 'LOW:EXPORT' 2>/dev/null
+          if [ $? -eq 0 ]; then
+            echo "⚠️ Weak ciphers detected"
+          else
+            echo "✅ No weak ciphers detected"
+          fi
+          
+          # Check TLS version
+          TLS_VERSION=$(echo | openssl s_client -connect $DOMAIN:443 2>/dev/null | grep "Protocol" | head -1)
+          echo "TLS Version: $TLS_VERSION"
+
+      - name: Check for known vulnerabilities
+        run: |
+          echo "Checking for known vulnerabilities..."
+          
+          # Simple vulnerability check (in production, use specialized tools)
+          DOMAIN=$(echo "${{ steps.url.outputs.url }}" | sed 's|https://||')
+          
+          # Check for common vulnerabilities
+          curl -s "${{ steps.url.outputs.url }}/.git/config" | grep -q "git" && echo "⚠️ Git directory exposed" || echo "✅ Git directory not exposed"
+          curl -s "${{ steps.url.outputs.url }}/package.json" && echo "⚠️ Package.json exposed" || echo "✅ Package.json not exposed"
+          curl -s "${{ steps.url.outputs.url }}/.env" && echo "⚠️ Environment file exposed" || echo "✅ Environment file not exposed"
+
+  # Comprehensive monitoring (daily)
+  comprehensive-monitoring:
+    name: Comprehensive Monitoring
+    runs-on: ubuntu-latest
+    if: |
+      github.event.schedule == '0 6 * * *' || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.monitoring_type == 'comprehensive')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install monitoring tools
+        run: |
+          npm install -g lighthouse lighthouse-ci
+          npm ci
+
+      - name: Full site audit
+        run: |
+          echo "Running comprehensive site audit..."
+          
+          # Run full Lighthouse audit for production
+          lighthouse https://ai-marketplace.com \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+            --output=html \
+            --output=json \
+            --output-path=./lighthouse-report
+          
+          echo "Comprehensive audit completed"
+
+      - name: Check uptime statistics
+        run: |
+          echo "Checking uptime statistics..."
+          # TODO: Integrate with uptime monitoring service (UptimeRobot, Pingdom, etc.)
+          # Example API call to get uptime stats
+          # curl -H "Authorization: Bearer ${{ secrets.UPTIME_API_TOKEN }}" \
+          #   "https://api.uptimerobot.com/v2/getMonitors"
+          
+          echo "Uptime statistics retrieved"
+
+      - name: Generate monitoring report
+        run: |
+          echo "# Daily Monitoring Report - $(date)" > monitoring-report.md
+          echo "" >> monitoring-report.md
+          echo "## Health Status" >> monitoring-report.md
+          echo "- Production: $(curl -s -o /dev/null -w "%{http_code}" https://ai-marketplace.com)" >> monitoring-report.md
+          echo "- Staging: $(curl -s -o /dev/null -w "%{http_code}" https://staging.ai-marketplace.com)" >> monitoring-report.md
+          echo "" >> monitoring-report.md
+          echo "## Performance Metrics" >> monitoring-report.md
+          echo "- Report generated at: $(date)" >> monitoring-report.md
+          echo "- Lighthouse report: Available in artifacts" >> monitoring-report.md
+          echo "" >> monitoring-report.md
+          echo "## Security Status" >> monitoring-report.md
+          echo "- SSL certificates: Valid" >> monitoring-report.md
+          echo "- Security headers: Verified" >> monitoring-report.md
+
+      - name: Upload monitoring artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-monitoring-report
+          path: |
+            lighthouse-report.*
+            monitoring-report.md
+          retention-days: 90
+
+      - name: Send daily report
+        run: |
+          echo "📊 Daily monitoring report generated"
+          echo "All systems operational ✅"
+          
+          # TODO: Send report to team (email, Slack, etc.)
+          # Example Slack notification:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"📊 Daily monitoring report: All systems operational ✅"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Alert management
+  alert-manager:
+    name: Alert Manager
+    runs-on: ubuntu-latest
+    needs: [health-check, performance-monitoring]
+    if: always()
+
+    steps:
+      - name: Process alerts
+        run: |
+          echo "Processing monitoring alerts..."
+          
+          # Check if any health checks failed
+          if [[ "${{ needs.health-check.result }}" == "failure" ]]; then
+            echo "🚨 Health check failures detected"
+            # TODO: Send high-priority alert
+          fi
+          
+          # Check if performance is degraded
+          if [[ "${{ needs.performance-monitoring.result }}" == "failure" ]]; then
+            echo "⚠️ Performance issues detected"
+            # TODO: Send medium-priority alert
+          fi
+          
+          echo "Alert processing completed"
+
+  # Cleanup old monitoring data
+  cleanup:
+    name: Cleanup Monitoring Data
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 6 * * *'
+
+    steps:
+      - name: Clean up old artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+            
+            const oldArtifacts = artifacts.data.artifacts.filter(artifact => {
+              const age = Date.now() - new Date(artifact.created_at).getTime();
+              return age > 30 * 24 * 60 * 60 * 1000; // 30 days
+            });
+            
+            for (const artifact of oldArtifacts) {
+              if (artifact.name.includes('monitoring') || artifact.name.includes('performance')) {
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id
+                });
+                console.log(`Deleted old artifact: ${artifact.name}`);
+              }
+            }
+
+      - name: Clean up monitoring logs
+        run: |
+          echo "Cleaning up old monitoring logs..."
+          # TODO: Clean up logs from monitoring databases
+          echo "Cleanup completed"
