@@ -460,6 +460,14 @@ export function Header() {
                           {/* Menu Items */}
                           <div className="py-1">
                             <Link
+                              href="/profile"
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
+                              onClick={() => setOpenDropdown(null)}
+                            >
+                              <User className="w-4 h-4 mr-3" />
+                              Profile
+                            </Link>
+                            <Link
                               href="/dashboard"
                               className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
                               onClick={() => setOpenDropdown(null)}
@@ -603,6 +611,14 @@ export function Header() {
                     
                     {/* Mobile Dashboard Links */}
                     <div className="space-y-1">
+                      <Link
+                        href="/profile"
+                        className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        <User className="w-4 h-4 mr-3" />
+                        Profile
+                      </Link>
                       <Link
                         href="/dashboard"
                         className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
