@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SignInButton, SignUpButton, UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { AuthButtons } from '@/components/auth/auth-buttons';
 import { Button } from '@/components/ui/button';
 import { Search } from '@/components/shared/search/global-search';
 import { 
@@ -132,14 +133,37 @@ export function Header() {
   const getUserRole = () => {
     if (!user) return 'User';
     
-    // Check public metadata first, then private metadata
-    const role = user.publicMetadata?.role || user.privateMetadata?.role || user.unsafeMetadata?.role;
-    
-    if (typeof role === 'string') {
-      return role.charAt(0).toUpperCase() + role.slice(1);
+    // Check email for test accounts first (same logic as AppSidebar)
+    const email = user.primaryEmailAddress?.emailAddress || '';
+    if (email === 'rshetty99@hotmail.com') {
+      return 'Freelancer'; // Known test account
+    }
+    if (email === 'rshetty99@gmail.com') {
+      return 'Freelancer'; // Known test account
+    }
+    if (email === 'rshetty@techsamur.ai') {
+      return 'Vendor Admin'; // Known test account
+    }
+    if (email === 'alsmith141520@gmail.com') {
+      return 'Customer Admin'; // Known test account
     }
     
-    // Default role based on email or organization
+    // Try to get from Clerk metadata (safe version)
+    const role = user.publicMetadata?.primary_role || user.publicMetadata?.role;
+    if (role && typeof role === 'string') {
+      return role.replace(/_/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    
+    // Try user type
+    const userType = user.publicMetadata?.user_type;
+    if (userType && typeof userType === 'string') {
+      return userType.charAt(0).toUpperCase() + userType.slice(1);
+    }
+    
+    // Default role based on email domain
     if (user.emailAddresses?.[0]?.emailAddress?.includes('@')) {
       const domain = user.emailAddresses[0].emailAddress.split('@')[1];
       if (domain.includes('admin') || domain.includes('staff')) {
@@ -479,16 +503,7 @@ export function Header() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-3">
-                    <SignInButton mode="modal">
-                      <Button variant="ghost">Sign In</Button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                      <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white border-0">
-                        Get Started
-                      </Button>
-                    </SignUpButton>
-                  </div>
+                  <AuthButtons />
                 )}
               </>
             )}
@@ -627,15 +642,8 @@ export function Header() {
                     </button>
                   </div>
                 ) : (
-                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
-                    <SignInButton mode="modal">
-                      <Button variant="outline" className="w-full">Sign In</Button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                      <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white border-0">
-                        Get Started
-                      </Button>
-                    </SignUpButton>
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <AuthButtons />
                   </div>
                 )}
               </>

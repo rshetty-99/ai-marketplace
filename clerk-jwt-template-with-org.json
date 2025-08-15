@@ -1,0 +1,22 @@
+{
+  "uid": "{{user.id}}",
+  "email": "{{user.primary_email_address.email_address}}",
+  "verified": "{{user.primary_email_address.verification.status == 'verified'}}",
+  "name": "{{user.first_name}} {{user.last_name}}",
+  "type": "{{user.public_metadata.user_type}}",
+  "onb_status": "{{user.public_metadata.onboarding_status}}",
+  "onb_done": "{{user.public_metadata.onboarding_completed | default: false}}",
+  "onb_step": "{{user.public_metadata.onboarding_current_step | default: 0}}",
+  "roles": "{{user.public_metadata.roles | default: '[]'}}",
+  "perms": "{{user.public_metadata.permissions | default: '[]'}}",
+  "status": "{{user.public_metadata.user_status}}",
+  "tier": "{{user.public_metadata.freelancer_tier}}",
+  "fl_verified": "{{user.public_metadata.freelancer_verified | default: false}}",
+  "api_lvl": "{{user.public_metadata.api_access_level}}",
+  "org": {
+    "id": "{{ user.organization_memberships[0].organization.id | default: user.public_metadata.organization_id | default: '' }}",
+    "name": "{{ user.organization_memberships[0].organization.name | default: user.public_metadata.organization_name | default: '' }}",
+    "slug": "{{ user.organization_memberships[0].organization.slug | default: '' }}",
+    "role": "{{ user.organization_memberships[0].role | default: user.public_metadata.organization_role | default: '' }}"
+  }
+}

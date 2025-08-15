@@ -1,0 +1,30 @@
+{
+  "user_id": "{{user.id}}",
+  "email": "{{user.primary_email_address.email_address}}",
+  "verified": "{{user.primary_email_address.verification.status == 'verified'}}",
+  "name": "{{user.first_name}} {{user.last_name}}",
+  "username": "{{user.username}}",
+  "type": "{{user.public_metadata.user_type}}",
+  "onboarding": {
+    "status": "{{user.public_metadata.onboarding_status}}",
+    "completed": "{{user.public_metadata.onboarding_completed | default: false}}",
+    "step": "{{user.public_metadata.onboarding_current_step | default: 0}}"
+  },
+  "org_id": "{{user.public_metadata.organization_id}}",
+  "org_role": "{{user.public_metadata.organization_role}}",
+  "roles": "{{user.public_metadata.roles | default: '[]'}}",
+  "permissions": "{{user.public_metadata.permissions | default: '[]'}}",
+  "status": "{{user.public_metadata.user_status}}",
+  "tier": "{{user.public_metadata.freelancer_tier}}",
+  "verified_freelancer": "{{user.public_metadata.freelancer_verified | default: false}}",
+  "rating": "{{user.public_metadata.freelancer_rating | default: null}}",
+  "can_invite": "{{user.public_metadata.can_invite_users | default: false}}",
+  "max_budget": "{{user.public_metadata.max_budget_approval | default: 0}}",
+  "api_level": "{{user.public_metadata.api_access_level}}",
+  "session_id": "{{session.id}}",
+  "org": {
+    "id": "{{ user.organization_memberships[0].organization.id | default: '' }}",
+    "slug": "{{ user.organization_memberships[0].organization.slug | default: '' }}",
+    "role": "{{ user.organization_memberships[0].role | default: '' }}"
+  }
+}

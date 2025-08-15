@@ -1,26 +1,27 @@
 'use client'
 
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { LogIn, UserPlus } from 'lucide-react'
+import Link from 'next/link'
 
 export function AuthButtons() {
   return (
     <>
       <SignedOut>
         <div className="flex items-center gap-2">
-          <SignInButton mode="modal">
+          <Link href="/sign-in">
             <Button variant="ghost" size="sm" className="hidden sm:flex">
               <LogIn className="mr-2 h-4 w-4" />
               Sign In
             </Button>
-          </SignInButton>
-          <SignUpButton mode="modal">
-            <Button size="sm" className="bg-primary hover:bg-primary/90">
+          </Link>
+          <Link href="/sign-up">
+            <Button size="sm" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0">
               <UserPlus className="mr-2 h-4 w-4" />
               Get Started
             </Button>
-          </SignUpButton>
+          </Link>
         </div>
       </SignedOut>
       

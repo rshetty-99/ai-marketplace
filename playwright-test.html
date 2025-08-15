@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playwright MCP Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .test-section {
+            margin: 2rem 0;
+            padding: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .test-section h2 {
+            color: #4a5568;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 0.5rem;
+        }
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #3182ce;
+            transform: translateY(-1px);
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin: 0.5rem 0;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        .status {
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+        .success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+        .info {
+            background: #bee3f8;
+            color: #2a4365;
+            border: 1px solid #90cdf4;
+        }
+        .counter {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4299e1;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .card {
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background: #f7fafc;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Playwright MCP Test Page</h1>
+        
+        <div class="status info">
+            <strong>MCP Server Status:</strong> Ready for testing browser automation capabilities
+        </div>
+
+        <!-- Basic Interaction Tests -->
+        <div class="test-section">
+            <h2>🖱️ Basic Interactions</h2>
+            <button id="clickBtn" onclick="handleClick()">Click Test</button>
+            <button id="hoverBtn" onmouseover="handleHover()">Hover Test</button>
+            <button id="toggleBtn" onclick="toggleContent()">Toggle Content</button>
+            <div id="clickResult" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- Form Testing -->
+        <div class="test-section">
+            <h2>📝 Form Testing</h2>
+            <form id="testForm" onsubmit="handleSubmit(event)">
+                <input type="text" id="nameInput" placeholder="Enter your name" required>
+                <input type="email" id="emailInput" placeholder="Enter your email" required>
+                <select id="categorySelect">
+                    <option value="">Select category</option>
+                    <option value="freelancer">Freelancer</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="customer">Customer</option>
+                </select>
+                <textarea id="messageInput" placeholder="Enter a message" rows="3"></textarea>
+                <button type="submit">Submit Form</button>
+            </form>
+            <div id="formResult"></div>
+        </div>
+
+        <!-- Dynamic Content -->
+        <div class="test-section">
+            <h2>⚡ Dynamic Content</h2>
+            <div class="counter" id="counter">0</div>
+            <button onclick="incrementCounter()">Increment</button>
+            <button onclick="decrementCounter()">Decrement</button>
+            <button onclick="resetCounter()">Reset</button>
+            <button onclick="loadDynamicContent()">Load Content</button>
+            <div id="dynamicContent"></div>
+        </div>
+
+        <!-- Navigation Testing -->
+        <div class="test-section">
+            <h2>🧭 Navigation</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Internal Links</h3>
+                    <a href="#forms" onclick="scrollToSection('forms')">Go to Forms</a><br>
+                    <a href="#dynamic" onclick="scrollToSection('dynamic')">Go to Dynamic</a><br>
+                    <a href="#top" onclick="scrollToTop()">Back to Top</a>
+                </div>
+                <div class="card">
+                    <h3>External Links</h3>
+                    <a href="https://playwright.dev" target="_blank">Playwright Docs</a><br>
+                    <a href="https://github.com/microsoft/playwright" target="_blank">Playwright GitHub</a><br>
+                    <a href="https://docs.anthropic.com" target="_blank">Anthropic Docs</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display -->
+        <div class="test-section">
+            <h2>📊 Data Display</h2>
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Skills</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Alice Johnson</td>
+                        <td>Frontend Developer</td>
+                        <td>React, TypeScript</td>
+                        <td><span style="color: green;">Available</span></td>
+                    </tr>
+                    <tr>
+                        <td>Bob Smith</td>
+                        <td>AI Engineer</td>
+                        <td>Python, TensorFlow</td>
+                        <td><span style="color: orange;">Busy</span></td>
+                    </tr>
+                    <tr>
+                        <td>Carol Davis</td>
+                        <td>Full Stack Developer</td>
+                        <td>Node.js, MongoDB</td>
+                        <td><span style="color: green;">Available</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            <button onclick="addTableRow()">Add Row</button>
+            <button onclick="sortTable()">Sort by Name</button>
+        </div>
+
+        <!-- Test Results -->
+        <div class="test-section">
+            <h2>✅ Test Results</h2>
+            <div id="testResults" class="status info">
+                <strong>Test Log:</strong>
+                <ul id="testLog"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let counter = 0;
+        let testLog = [];
+
+        function logTest(message) {
+            testLog.push(`${new Date().toLocaleTimeString()}: ${message}`);
+            updateTestLog();
+        }
+
+        function updateTestLog() {
+            const logElement = document.getElementById('testLog');
+            logElement.innerHTML = testLog.slice(-10).map(log => `<li>${log}</li>`).join('');
+        }
+
+        function handleClick() {
+            document.getElementById('clickResult').innerHTML = 
+                '<div class="status success">✅ Button clicked successfully!</div>';
+            logTest('Click test completed');
+        }
+
+        function handleHover() {
+            document.getElementById('clickResult').innerHTML = 
+                '<div class="status success">✅ Hover event triggered!</div>';
+            logTest('Hover test completed');
+        }
+
+        function toggleContent() {
+            const result = document.getElementById('clickResult');
+            result.style.display = result.style.display === 'none' ? 'block' : 'none';
+            logTest('Content toggle test completed');
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            const name = document.getElementById('nameInput').value;
+            const email = document.getElementById('emailInput').value;
+            const category = document.getElementById('categorySelect').value;
+            const message = document.getElementById('messageInput').value;
+
+            document.getElementById('formResult').innerHTML = 
+                `<div class="status success">
+                    <strong>Form Submitted:</strong><br>
+                    Name: ${name}<br>
+                    Email: ${email}<br>
+                    Category: ${category}<br>
+                    Message: ${message}
+                </div>`;
+            logTest('Form submission test completed');
+        }
+
+        function incrementCounter() {
+            counter++;
+            document.getElementById('counter').textContent = counter;
+            logTest(`Counter incremented to ${counter}`);
+        }
+
+        function decrementCounter() {
+            counter--;
+            document.getElementById('counter').textContent = counter;
+            logTest(`Counter decremented to ${counter}`);
+        }
+
+        function resetCounter() {
+            counter = 0;
+            document.getElementById('counter').textContent = counter;
+            logTest('Counter reset to 0');
+        }
+
+        function loadDynamicContent() {
+            const content = document.getElementById('dynamicContent');
+            content.innerHTML = `
+                <div class="status success">
+                    <h4>🚀 Dynamic Content Loaded</h4>
+                    <p>This content was loaded at ${new Date().toLocaleString()}</p>
+                    <p>Random number: ${Math.floor(Math.random() * 1000)}</p>
+                </div>
+            `;
+            logTest('Dynamic content loaded');
+        }
+
+        function scrollToSection(section) {
+            // Simple scroll simulation
+            window.scrollBy(0, 200);
+            logTest(`Scrolled to ${section} section`);
+        }
+
+        function scrollToTop() {
+            window.scrollTo(0, 0);
+            logTest('Scrolled to top');
+        }
+
+        function addTableRow() {
+            const table = document.getElementById('dataTable').getElementsByTagName('tbody')[0];
+            const newRow = table.insertRow();
+            newRow.innerHTML = `
+                <td>New User ${table.rows.length}</td>
+                <td>Test Role</td>
+                <td>Test Skills</td>
+                <td><span style="color: blue;">New</span></td>
+            `;
+            logTest('New table row added');
+        }
+
+        function sortTable() {
+            // Simple sort simulation
+            logTest('Table sorted by name (simulated)');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            logTest('Page loaded successfully');
+            logTest('Playwright MCP test page ready');
+        });
+
+        // Add some periodic updates to test dynamic content
+        setInterval(() => {
+            const randomUpdate = Math.random() < 0.1; // 10% chance
+            if (randomUpdate) {
+                logTest('Periodic update triggered');
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

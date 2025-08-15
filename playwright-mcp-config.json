@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "url": "http://localhost:3001/mcp",
+      "description": "Microsoft Playwright MCP Server for browser automation",
+      "capabilities": [
+        "Web page interaction",
+        "Screenshot capture", 
+        "DOM manipulation",
+        "Form filling",
+        "Navigation",
+        "Accessibility tree analysis"
+      ]
+    }
+  },
+  "serverInfo": {
+    "name": "Playwright MCP Server",
+    "version": "0.0.33",
+    "host": "0.0.0.0",
+    "port": 3001,
+    "endpoints": {
+      "mcp": "http://localhost:3001/mcp",
+      "sse": "http://localhost:3001/sse"
+    }
+  },
+  "configuration": {
+    "browser": "chrome",
+    "headless": false,
+    "viewport": "1280,720",
+    "allowedOrigins": "*",
+    "saveTrace": true,
+    "saveSession": true,
+    "outputDir": "./playwright-output"
+  }
+}

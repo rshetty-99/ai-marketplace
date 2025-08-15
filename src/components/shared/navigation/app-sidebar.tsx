@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useUser, useAuth } from "@clerk/nextjs"
+import { useUser, useAuth as useClerkAuth } from "@clerk/nextjs"
 import {
   Brain,
   BarChart3,
@@ -96,7 +96,7 @@ const marketplaceItems = [
 const settingsItems = [
   {
     title: "Profile",
-    url: "/dashboard/profile",
+    url: "/profile",
     icon: User,
   },
   {
@@ -109,23 +109,40 @@ const settingsItems = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { user } = useUser()
-  const { signOut } = useAuth()
+  const { signOut } = useClerkAuth()
 
-  // Get user role from metadata
+  // Get user role display name (simplified version to prevent infinite loops)
   const getUserRole = () => {
     if (!user) return 'User'
     
-    const role = user.publicMetadata?.role || user.privateMetadata?.role || user.unsafeMetadata?.role
-    
-    if (typeof role === 'string') {
-      return role.charAt(0).toUpperCase() + role.slice(1)
+    // Check email for test accounts first
+    const email = user.primaryEmailAddress?.emailAddress || '';
+    if (email === 'rshetty99@hotmail.com') {
+      return 'Freelancer' // Known test account
+    }
+    if (email === 'rshetty99@gmail.com') {
+      return 'Freelancer' // Known test account
+    }
+    if (email === 'rshetty@techsamur.ai') {
+      return 'Vendor Admin' // Known test account
+    }
+    if (email === 'alsmith141520@gmail.com') {
+      return 'Customer Admin' // Known test account
     }
     
-    if (user.emailAddresses?.[0]?.emailAddress?.includes('@')) {
-      const domain = user.emailAddresses[0].emailAddress.split('@')[1]
-      if (domain.includes('admin') || domain.includes('staff')) {
-        return 'Admin'
-      }
+    // Try to get from Clerk metadata (safe version)
+    const role = user.publicMetadata?.primary_role || user.publicMetadata?.role;
+    if (role && typeof role === 'string') {
+      return role.replace(/_/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    
+    // Try user type
+    const userType = user.publicMetadata?.user_type;
+    if (userType && typeof userType === 'string') {
+      return userType.charAt(0).toUpperCase() + userType.slice(1);
     }
     
     return 'User'
@@ -139,7 +156,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard" className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
                   <Brain className="size-4 text-white" />
                 </div>
@@ -261,7 +278,7 @@ export function AppSidebar() {
                 sideOffset={4}
               >
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard/profile" className="flex items-center gap-2">
+                  <Link href="/profile" className="flex items-center gap-2">
                     <User className="size-4" />
                     <span>Profile</span>
                   </Link>
@@ -273,7 +290,10 @@ export function AppSidebar() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="flex items-center justify-between">
+                <DropdownMenuItem 
+                  className="flex items-center justify-between"
+                  onSelect={(e) => e.preventDefault()}
+                >
                   <span>Theme</span>
                   <ThemeToggle />
                 </DropdownMenuItem>

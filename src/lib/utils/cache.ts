@@ -303,6 +303,12 @@ export class RedisCache {
       return; // Skip Redis in browser
     }
 
+    // Skip Redis in development environment
+    if (process.env.NODE_ENV === 'development' && !process.env.REDIS_URL) {
+      console.log('Skipping Redis connection in development mode');
+      return;
+    }
+
     try {
       // Dynamic import for server-side only
       const Redis = (await import('ioredis')).default;

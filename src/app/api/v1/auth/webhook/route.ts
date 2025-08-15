@@ -6,6 +6,18 @@ import { withErrorHandler, createSuccessResponse } from '@/lib/utils/error-handl
 import { getAdminDb } from '@/lib/firebase';
 import { logger } from '@/lib/utils/logger';
 import { cache, CacheTags } from '@/lib/utils/cache';
+import { 
+  syncUserToSessionClaims, 
+  initializeNewUserSessionClaims,
+  updateOrganizationMembership,
+  removeOrganizationMembership,
+  updateUserRolesInSession
+} from '@/lib/auth/session-management';
+import {
+  handleNewOrganizationMember,
+  syncClerkRoleToMarketplace,
+  determineOrganizationType
+} from '@/lib/auth/role-mapping';
 
 /**
  * POST /api/v1/auth/webhook
@@ -137,6 +149,9 @@ async function handleUserCreated(adminDb: any, userData: any) {
       }
     });
 
+    // Initialize session claims for new user
+    await initializeNewUserSessionClaims(userId);
+
     // Invalidate user cache
     cache.invalidateByTags([CacheTags.USER, `user:${userId}`]);
 
@@ -145,7 +160,7 @@ async function handleUserCreated(adminDb: any, userData: any) {
       createdViaClerk: true
     });
 
-    logger.info('User created successfully', { userId });
+    logger.info('User created successfully with session claims', { userId });
 
   } catch (error) {
     logger.error('Failed to handle user created event', error as Error, {
@@ -173,6 +188,9 @@ async function handleUserUpdated(adminDb: any, userData: any) {
       'metadata.phoneVerified': userData.phone_numbers?.[0]?.verification?.status === 'verified'
     });
 
+    // Sync updated user data to session claims
+    await syncUserToSessionClaims(userId);
+
     // Invalidate user cache
     cache.invalidateByTags([CacheTags.USER, `user:${userId}`]);
 
@@ -181,7 +199,7 @@ async function handleUserUpdated(adminDb: any, userData: any) {
       updatedViaClerk: true
     });
 
-    logger.info('User updated successfully', { userId });
+    logger.info('User updated successfully with session claims sync', { userId });
 
   } catch (error) {
     logger.error('Failed to handle user updated event', error as Error, {
@@ -293,6 +311,7 @@ async function handleOrganizationMembershipCreated(adminDb: any, membershipData:
   try {
     const userId = membershipData.public_user_data?.user_id;
     const organizationId = membershipData.organization?.id;
+    const organizationName = membershipData.organization?.name;
     const role = membershipData.role;
 
     if (!userId || !organizationId) {
@@ -303,11 +322,21 @@ async function handleOrganizationMembershipCreated(adminDb: any, membershipData:
     // Update user's organization and roles
     await adminDb.collection('users').doc(userId).update({
       organizationId,
+      organizationName,
+      organizationRole: role,
       updatedAt: new Date()
     });
 
-    // TODO: Map Clerk roles to internal permission system
-    // For now, store the Clerk role directly
+    // Handle new organization member with role mapping
+    await handleNewOrganizationMember(
+      userId, 
+      organizationId, 
+      organizationName, 
+      role,
+      membershipData.organization?.slug
+    );
+
+    // Organization membership session claims are updated in handleNewOrganizationMember
 
     // Invalidate caches
     cache.invalidateByTags([
@@ -322,7 +351,7 @@ async function handleOrganizationMembershipCreated(adminDb: any, membershipData:
       role
     });
 
-    logger.info('Organization membership created', { userId, organizationId, role });
+    logger.info('Organization membership created with session claims update', { userId, organizationId, role });
 
   } catch (error) {
     logger.error('Failed to handle organization membership created event', error as Error, {
@@ -339,6 +368,7 @@ async function handleOrganizationMembershipUpdated(adminDb: any, membershipData:
   try {
     const userId = membershipData.public_user_data?.user_id;
     const organizationId = membershipData.organization?.id;
+    const organizationName = membershipData.organization?.name;
     const role = membershipData.role;
 
     if (!userId || !organizationId) {
@@ -346,7 +376,29 @@ async function handleOrganizationMembershipUpdated(adminDb: any, membershipData:
       return;
     }
 
-    // TODO: Update user roles based on new membership role
+    // Update user's organization role
+    await adminDb.collection('users').doc(userId).update({
+      organizationRole: role,
+      updatedAt: new Date()
+    });
+
+    // Determine organization type for role mapping
+    const orgType = await determineOrganizationType(
+      organizationId, 
+      organizationName,
+      membershipData.organization?.slug
+    );
+
+    // Sync the updated Clerk role to marketplace role
+    await syncClerkRoleToMarketplace(
+      userId,
+      role,
+      organizationId,
+      organizationName,
+      orgType
+    );
+
+    // Organization membership session claims are updated in syncClerkRoleToMarketplace
 
     // Invalidate caches
     cache.invalidateByTags([
@@ -361,7 +413,7 @@ async function handleOrganizationMembershipUpdated(adminDb: any, membershipData:
       role
     });
 
-    logger.info('Organization membership updated', { userId, organizationId, role });
+    logger.info('Organization membership updated with session claims', { userId, organizationId, role });
 
   } catch (error) {
     logger.error('Failed to handle organization membership updated event', error as Error, {
@@ -387,10 +439,23 @@ async function handleOrganizationMembershipDeleted(adminDb: any, membershipData:
     // Remove user's organization association
     await adminDb.collection('users').doc(userId).update({
       organizationId: null,
+      organizationName: null,
+      organizationRole: null,
       updatedAt: new Date()
     });
 
-    // TODO: Handle cleanup of organization-specific roles and permissions
+    // Remove organization membership from session claims
+    await removeOrganizationMembership(userId);
+
+    // Clean up organization-specific roles in database
+    await adminDb.collection('users').doc(userId).update({
+      roles: [], // Clear all roles when leaving organization
+      organizationType: null,
+      updatedAt: new Date()
+    });
+
+    // Clear roles from session claims
+    await updateUserRolesInSession(userId, []);
 
     // Invalidate caches
     cache.invalidateByTags([
@@ -404,7 +469,7 @@ async function handleOrganizationMembershipDeleted(adminDb: any, membershipData:
       organizationId
     });
 
-    logger.info('Organization membership deleted', { userId, organizationId });
+    logger.info('Organization membership deleted with session claims cleanup', { userId, organizationId });
 
   } catch (error) {
     logger.error('Failed to handle organization membership deleted event', error as Error, {

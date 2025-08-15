@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SignInButton, SignUpButton, UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { AuthButtons } from '@/components/auth/auth-buttons';
 import { Button } from '@/components/ui/button';
 import { Search } from '@/components/shared/search/global-search';
 import { 
@@ -355,14 +356,7 @@ export function HeaderFixed() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-3">
-                    <SignInButton mode="modal">
-                      <Button variant="ghost">Sign In</Button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                      <Button>Get Started</Button>
-                    </SignUpButton>
-                  </div>
+                  <AuthButtons />
                 )}
               </>
             )}
@@ -497,12 +491,7 @@ export function HeaderFixed() {
                   </div>
                 ) : (
                   <div className="pt-4 border-t border-gray-100 space-y-2">
-                    <SignInButton mode="modal">
-                      <Button variant="outline" className="w-full">Sign In</Button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                      <Button className="w-full">Get Started</Button>
-                    </SignUpButton>
+                    <AuthButtons />
                   </div>
                 )}
               </>

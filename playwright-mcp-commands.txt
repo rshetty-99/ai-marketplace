@@ -1,0 +1,54 @@
+# Home Page Audit Commands
+"Navigate to http://localhost:3000"
+"Take a screenshot of the current page"
+"Check the accessibility tree of this page"
+"Resize viewport to 375x667 and take a screenshot" # Mobile
+"Resize viewport to 768x1024 and take a screenshot" # Tablet
+"Resize viewport to 1920x1080 and take a screenshot" # Desktop
+"Get all the colors used on this page"
+"Check if there are any console errors"
+"Find all buttons and interactive elements"
+
+# Dashboard Audit Commands
+"Navigate to http://localhost:3000/dashboard"
+"Take a screenshot of the current page"
+"Check the accessibility tree of this page"
+"Resize viewport to 375x667 and take a screenshot" # Mobile
+"Resize viewport to 768x1024 and take a screenshot" # Tablet
+"Resize viewport to 1920x1080 and take a screenshot" # Desktop
+"Get all the colors used on this page"
+"Check if there are any console errors"
+"Find all buttons and interactive elements"
+
+# Projects Audit Commands
+"Navigate to http://localhost:3000/projects"
+"Take a screenshot of the current page"
+"Check the accessibility tree of this page"
+"Resize viewport to 375x667 and take a screenshot" # Mobile
+"Resize viewport to 768x1024 and take a screenshot" # Tablet
+"Resize viewport to 1920x1080 and take a screenshot" # Desktop
+"Get all the colors used on this page"
+"Check if there are any console errors"
+"Find all buttons and interactive elements"
+
+# Search Audit Commands
+"Navigate to http://localhost:3000/search"
+"Take a screenshot of the current page"
+"Check the accessibility tree of this page"
+"Resize viewport to 375x667 and take a screenshot" # Mobile
+"Resize viewport to 768x1024 and take a screenshot" # Tablet
+"Resize viewport to 1920x1080 and take a screenshot" # Desktop
+"Get all the colors used on this page"
+"Check if there are any console errors"
+"Find all buttons and interactive elements"
+
+# Messages Audit Commands
+"Navigate to http://localhost:3000/messages"
+"Take a screenshot of the current page"
+"Check the accessibility tree of this page"
+"Resize viewport to 375x667 and take a screenshot" # Mobile
+"Resize viewport to 768x1024 and take a screenshot" # Tablet
+"Resize viewport to 1920x1080 and take a screenshot" # Desktop
+"Get all the colors used on this page"
+"Check if there are any console errors"
+"Find all buttons and interactive elements"
