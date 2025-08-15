@@ -153,8 +153,8 @@ export function Header() {
   const userRole = getUserRole();
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div className="container mx-auto px-4">
+    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
+      <div className="w-full max-w-7xl xl:max-w-[1400px] 2xl:max-w-[1800px] 3xl:max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
@@ -166,7 +166,7 @@ export function Header() {
               <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                 <Brain className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
                 AI Marketplace
               </span>
             </Link>
@@ -183,7 +183,7 @@ export function Header() {
                       <NavigationMenu>
                         <NavigationMenuList>
                           <NavigationMenuItem>
-                            <NavigationMenuTrigger className="text-sm font-medium">
+                            <NavigationMenuTrigger className="text-sm font-medium dark:text-gray-200">
                               {item.name}
                             </NavigationMenuTrigger>
                             <NavigationMenuContent>
@@ -290,7 +290,7 @@ export function Header() {
                               'flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors',
                               pathname.startsWith(item.href) 
                                 ? 'text-blue-600 bg-blue-50' 
-                                : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                                : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                             )}
                             onClick={() => setOpenDropdown(openDropdown === item.name ? null : item.name)}
                           >
@@ -304,7 +304,7 @@ export function Header() {
                               'px-3 py-2 rounded-md text-sm font-medium transition-colors',
                               pathname.startsWith(item.href) 
                                 ? 'text-blue-600 bg-blue-50' 
-                                : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                                : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                             )}
                             onClick={() => handleNavClick(item.name, item.href)}
                           >
@@ -314,12 +314,12 @@ export function Header() {
 
                         {/* Dropdown Menu */}
                         {item.children && openDropdown === item.name && (
-                          <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50">
+                          <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                             {item.children.map((child) => (
                               <Link
                                 key={child.name}
                                 href={child.href}
-                                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600"
+                                className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
                                 onClick={() => {
                                   handleNavClick(`${item.name} - ${child.name}`, child.href);
                                   setOpenDropdown(null);
@@ -383,7 +383,7 @@ export function Header() {
                     {/* Custom Profile Dropdown */}
                     <div className="relative" ref={dropdownRef}>
                       <button
-                        className="flex items-center space-x-2 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+                        className="flex items-center space-x-2 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         onClick={() => setOpenDropdown(openDropdown === 'profile' ? null : 'profile')}
                         aria-label="Profile menu"
                       >
@@ -398,14 +398,14 @@ export function Header() {
                             <User className="w-4 h-4 text-white" />
                           )}
                         </div>
-                        <ChevronDown className="w-3 h-3 text-gray-500" />
+                        <ChevronDown className="w-3 h-3 text-gray-500 dark:text-gray-400" />
                       </button>
 
                       {/* Profile Dropdown Menu */}
                       {openDropdown === 'profile' && (
-                        <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-gray-200 py-2 z-50">
+                        <div className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
                           {/* User Info Section */}
-                          <div className="px-4 py-3 border-b border-gray-100">
+                          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                             <div className="flex items-center space-x-3">
                               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                                 {user?.imageUrl ? (
@@ -419,10 +419,10 @@ export function Header() {
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                                   {user?.fullName || user?.firstName || 'User'}
                                 </p>
-                                <p className="text-xs text-gray-500 truncate">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                   {user?.emailAddresses?.[0]?.emailAddress}
                                 </p>
                                 <div className="flex items-center mt-1">
@@ -437,7 +437,7 @@ export function Header() {
                           <div className="py-1">
                             <Link
                               href="/dashboard"
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600"
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
                               onClick={() => setOpenDropdown(null)}
                             >
                               <BarChart3 className="w-4 h-4 mr-3" />
@@ -445,7 +445,7 @@ export function Header() {
                             </Link>
                             <Link
                               href="/dashboard/projects"
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600"
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
                               onClick={() => setOpenDropdown(null)}
                             >
                               <Zap className="w-4 h-4 mr-3" />
@@ -453,7 +453,7 @@ export function Header() {
                             </Link>
                             <Link
                               href="/dashboard/settings"
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-blue-600"
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400"
                               onClick={() => setOpenDropdown(null)}
                             >
                               <Settings className="w-4 h-4 mr-3" />
@@ -462,13 +462,13 @@ export function Header() {
                           </div>
 
                           {/* Sign Out */}
-                          <div className="border-t border-gray-100 py-1">
+                          <div className="border-t border-gray-100 dark:border-gray-700 py-1">
                             <button
                               onClick={() => {
                                 setOpenDropdown(null);
                                 signOut();
                               }}
-                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                             >
                               <LogOut className="w-4 h-4 mr-3" />
                               Sign Out
@@ -484,7 +484,9 @@ export function Header() {
                       <Button variant="ghost">Sign In</Button>
                     </SignInButton>
                     <SignUpButton mode="modal">
-                      <Button>Get Started</Button>
+                      <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white border-0">
+                        Get Started
+                      </Button>
                     </SignUpButton>
                   </div>
                 )}
@@ -493,14 +495,14 @@ export function Header() {
 
             {/* Mobile menu button */}
             <button
-              className="lg:hidden p-2 rounded-md hover:bg-gray-100 transition-colors"
+              className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle mobile menu"
             >
               {mobileMenuOpen ? (
-                <X className="w-6 h-6 text-gray-600" />
+                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               ) : (
-                <Menu className="w-6 h-6 text-gray-600" />
+                <Menu className="w-6 h-6 text-gray-600 dark:text-gray-400" />
               )}
             </button>
           </div>
@@ -509,11 +511,11 @@ export function Header() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-t border-gray-200">
-          <div className="container mx-auto px-4 py-4 space-y-4">
+        <div className="lg:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
+          <div className="w-full max-w-7xl xl:max-w-[1400px] 2xl:max-w-[1800px] 3xl:max-w-[2000px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 py-4 space-y-4">
             {/* Mobile Search */}
             {!isDashboard && (
-              <div className="pb-4 border-b border-gray-100">
+              <div className="pb-4 border-b border-gray-100 dark:border-gray-800">
                 <Search variant="minimal" />
               </div>
             )}
@@ -559,9 +561,9 @@ export function Header() {
             {isLoaded && (
               <>
                 {isSignedIn ? (
-                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
                     {/* Mobile User Profile */}
-                    <div className="flex items-center space-x-3 px-3 py-2 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                         {user?.imageUrl ? (
                           <img 
@@ -574,7 +576,7 @@ export function Header() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                           {user?.fullName || user?.firstName || 'User'}
                         </p>
                         <div className="flex items-center mt-0.5">
@@ -625,12 +627,14 @@ export function Header() {
                     </button>
                   </div>
                 ) : (
-                  <div className="pt-4 border-t border-gray-100 space-y-2">
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
                     <SignInButton mode="modal">
                       <Button variant="outline" className="w-full">Sign In</Button>
                     </SignInButton>
                     <SignUpButton mode="modal">
-                      <Button className="w-full">Get Started</Button>
+                      <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white border-0">
+                        Get Started
+                      </Button>
                     </SignUpButton>
                   </div>
                 )}

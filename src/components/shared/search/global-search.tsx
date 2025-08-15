@@ -220,7 +220,7 @@ export function Search({
             type="submit"
             size={isMinimal ? "sm" : "default"}
             className={cn(
-              'mr-2',
+              'mr-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white border-0',
               isMinimal ? 'h-8 px-3' : 'h-10 px-6'
             )}
           >
