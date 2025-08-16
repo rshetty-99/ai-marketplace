@@ -32,85 +32,9 @@ import Link from 'next/link';
 import { useAnalytics } from '@/components/providers/analytics-provider';
 import { generateProviderDirectorySchema } from '@/lib/seo/structured-data';
 import Script from 'next/script';
+import { searchProviders, type Provider, type ProviderFilters as ApiProviderFilters, type ProviderSortOptions } from '@/lib/api/providers';
 
-// Mock data - replace with actual API calls
-const MOCK_PROVIDERS = [
-  {
-    id: '1',
-    slug: 'ai-innovations-inc',
-    name: 'AI Innovations Inc',
-    description: 'Leading provider of enterprise AI solutions with 15+ years of experience in machine learning and data science.',
-    logo: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=100&h=100&fit=crop&crop=faces',
-    location: 'San Francisco, CA',
-    country: 'us',
-    rating: 4.9,
-    reviewCount: 127,
-    clientCount: 50,
-    projectsCompleted: 200,
-    expertiseAreas: ['Machine Learning', 'Computer Vision', 'NLP'],
-    industries: ['Healthcare', 'Finance', 'Retail'],
-    certifications: ['SOC 2', 'ISO 27001', 'GDPR'],
-    companySize: 'medium',
-    founded: 2008,
-    verified: true,
-    featured: true,
-    pricingModel: 'project',
-    startingPrice: 50000,
-    portfolio: [
-      {
-        title: 'Healthcare AI Diagnostic System',
-        description: 'Built AI system for early cancer detection with 95% accuracy',
-        image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=300&h=200&fit=crop'
-      }
-    ]
-  },
-  {
-    id: '2',
-    slug: 'data-science-experts',
-    name: 'Data Science Experts',
-    description: 'Specialized team of data scientists and ML engineers helping businesses unlock insights from their data.',
-    logo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces',
-    location: 'London, UK',
-    country: 'uk',
-    rating: 4.7,
-    reviewCount: 89,
-    clientCount: 35,
-    projectsCompleted: 150,
-    expertiseAreas: ['Data Science', 'Predictive Analytics', 'Deep Learning'],
-    industries: ['Manufacturing', 'Transportation', 'Energy'],
-    certifications: ['ISO 27001', 'GDPR'],
-    companySize: 'small',
-    founded: 2015,
-    verified: true,
-    featured: false,
-    pricingModel: 'hourly',
-    startingPrice: 150,
-    portfolio: []
-  },
-  {
-    id: '3',
-    slug: 'neural-networks-pro',
-    name: 'Neural Networks Pro',
-    description: 'Cutting-edge AI research lab turned consulting firm, specializing in neural network architectures.',
-    logo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=faces',
-    location: 'Toronto, Canada',
-    country: 'ca',
-    rating: 4.8,
-    reviewCount: 156,
-    clientCount: 75,
-    projectsCompleted: 300,
-    expertiseAreas: ['Neural Networks', 'Reinforcement Learning', 'AI Research'],
-    industries: ['Gaming', 'Robotics', 'Autonomous Systems'],
-    certifications: ['SOC 2', 'Privacy Shield'],
-    companySize: 'large',
-    founded: 2012,
-    verified: true,
-    featured: true,
-    pricingModel: 'project',
-    startingPrice: 75000,
-    portfolio: []
-  },
-];
+// Provider data loaded from API
 
 const FILTER_OPTIONS = {
   expertise: [
@@ -195,6 +119,11 @@ interface ProviderFilterForm {
 export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryClientProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalProviders, setTotalProviders] = useState(0);
+  const [filterCounts, setFilterCounts] = useState<any>(null);
   const { trackEvent } = useAnalytics();
 
   const form = useForm<ProviderFilterForm>({
@@ -214,87 +143,75 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
 
   const filters = form.watch();
 
-  // Filter providers based on current filters
-  const filteredProviders = useMemo(() => {
-    let result = [...MOCK_PROVIDERS];
-
-    if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
-      result = result.filter(provider => 
-        provider.name.toLowerCase().includes(searchTerm) ||
-        provider.description.toLowerCase().includes(searchTerm) ||
-        provider.expertiseAreas.some(area => area.toLowerCase().includes(searchTerm))
-      );
+  // Load providers from API
+  const loadProviders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Convert form filters to API filters
+      const apiFilters: ApiProviderFilters = {};
+      
+      if (filters.search) {
+        apiFilters.search = filters.search;
+      }
+      
+      if (filters.expertise) {
+        apiFilters.expertise = [filters.expertise];
+      }
+      
+      if (filters.location) {
+        apiFilters.location = filters.location;
+      }
+      
+      if (filters.certification) {
+        apiFilters.certification = [filters.certification];
+      }
+      
+      if (filters.industry) {
+        apiFilters.industries = [filters.industry];
+      }
+      
+      if (filters.companySize) {
+        apiFilters.companySize = filters.companySize as any;
+      }
+      
+      if (filters.rating) {
+        apiFilters.rating = parseFloat(filters.rating);
+      }
+      
+      if (filters.verified) {
+        apiFilters.verified = filters.verified;
+      }
+      
+      if (filters.pricing) {
+        apiFilters.pricing = { model: filters.pricing as any };
+      }
+      
+      // Convert sort options
+      const sortOptions: ProviderSortOptions = {
+        field: (filters.sort || 'relevance') as any,
+        direction: 'desc'
+      };
+      
+      // Make API call
+      const response = await searchProviders(apiFilters, sortOptions, 1, 24);
+      
+      setProviders(response.providers);
+      setTotalProviders(response.total);
+      setFilterCounts(response.filterCounts);
+      
+    } catch (err) {
+      console.error('Error loading providers:', err);
+      setError('Failed to load providers. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    if (filters.expertise) {
-      result = result.filter(provider => 
-        provider.expertiseAreas.some(area => 
-          area.toLowerCase().includes(filters.expertise!.toLowerCase())
-        )
-      );
-    }
-
-    if (filters.location) {
-      result = result.filter(provider => provider.country === filters.location);
-    }
-
-    if (filters.certification) {
-      result = result.filter(provider => 
-        provider.certifications.includes(filters.certification!)
-      );
-    }
-
-    if (filters.industry) {
-      result = result.filter(provider => 
-        provider.industries.some(industry => 
-          industry.toLowerCase().includes(filters.industry!.toLowerCase())
-        )
-      );
-    }
-
-    if (filters.companySize) {
-      result = result.filter(provider => provider.companySize === filters.companySize);
-    }
-
-    if (filters.rating) {
-      const minRating = parseFloat(filters.rating);
-      result = result.filter(provider => provider.rating >= minRating);
-    }
-
-    if (filters.verified) {
-      result = result.filter(provider => provider.verified);
-    }
-
-    if (filters.pricing) {
-      result = result.filter(provider => provider.pricingModel === filters.pricing);
-    }
-
-    // Sort results
-    const sortBy = filters.sort || 'relevance';
-    switch (sortBy) {
-      case 'rating':
-        result.sort((a, b) => b.rating - a.rating);
-        break;
-      case 'reviews':
-        result.sort((a, b) => b.reviewCount - a.reviewCount);
-        break;
-      case 'newest':
-        result.sort((a, b) => b.founded - a.founded);
-        break;
-      case 'projects':
-        result.sort((a, b) => b.projectsCompleted - a.projectsCompleted);
-        break;
-      default:
-        // Featured first, then by rating
-        result.sort((a, b) => {
-          if (a.featured && !b.featured) return -1;
-          if (!a.featured && b.featured) return 1;
-          return b.rating - a.rating;
-        });
-    }
-
-    return result;
+  };
+  
+  // Load providers on component mount and filter changes
+  useEffect(() => {
+    loadProviders();
   }, [filters]);
 
   const handleFilterChange = (key: keyof ProviderFilterForm, value: string | boolean) => {
@@ -304,7 +221,7 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
     trackEvent('provider_filter_applied', {
       filter_type: key,
       filter_value: value.toString(),
-      result_count: filteredProviders.length
+      result_count: providers.length
     });
   };
 
@@ -317,8 +234,8 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
   };
 
   const providerDirectorySchema = generateProviderDirectorySchema({
-    providers: filteredProviders,
-    totalCount: filteredProviders.length,
+    providers,
+    totalCount: totalProviders,
     filters
   });
 
@@ -326,10 +243,10 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
     // Track page view
     trackEvent('provider_directory_viewed', {
       filters_applied: Object.keys(filters).filter(key => filters[key as keyof typeof filters]).length,
-      result_count: filteredProviders.length,
+      result_count: providers.length,
       view_mode: viewMode
     });
-  }, []);
+  }, [providers.length, viewMode]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -348,7 +265,7 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
           <div className="text-center space-y-6">
             <div className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/50 px-3 py-1 text-sm font-medium text-blue-700 dark:text-blue-300">
               <Users className="mr-2 h-4 w-4" />
-              {filteredProviders.length} Verified AI Providers
+              {loading ? 'Loading...' : `${totalProviders} Verified AI Providers`}
             </div>
             
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight dark:text-white">
@@ -497,13 +414,32 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
       {/* Results Section */}
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {filteredProviders.length === 0 ? (
+          {error ? (
+            <EmptyState
+              title="Error loading providers"
+              description={error}
+              icon={Users}
+              action={
+                <Button onClick={loadProviders}>
+                  Try Again
+                </Button>
+              }
+            />
+          ) : loading ? (
+            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="bg-gray-200 dark:bg-gray-700 rounded-lg h-64"></div>
+                </div>
+              ))}
+            </div>
+          ) : providers.length === 0 ? (
             <EmptyState
               title="No providers found"
               description="Try adjusting your filters or search terms to find AI providers."
               icon={Users}
               action={
-                <Button onClick={() => setFilters({})}>
+                <Button onClick={() => form.reset()}>
                   Clear Filters
                 </Button>
               }
@@ -512,7 +448,7 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
             <>
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {filteredProviders.length} AI Provider{filteredProviders.length !== 1 ? 's' : ''}
+                  {providers.length} AI Provider{providers.length !== 1 ? 's' : ''}
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400">
                   Showing verified providers with proven track records
@@ -524,7 +460,7 @@ export function ProviderDirectoryClient({ initialFilters }: ProviderDirectoryCli
                   ? 'sm:grid-cols-2 lg:grid-cols-3' 
                   : 'grid-cols-1'
               }`}>
-                {filteredProviders.map((provider) => (
+                {providers.map((provider) => (
                   <ProviderCard
                     key={provider.id}
                     provider={provider}
