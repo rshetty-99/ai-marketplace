@@ -38,6 +38,104 @@ export function generateWebSiteSchema() {
   };
 }
 
+export function generateProviderDirectorySchema(data: {
+  providers: any[];
+  totalCount: number;
+  filters: any;
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'AI Service Providers Directory',
+    description: 'Comprehensive directory of verified AI service providers and consulting companies',
+    numberOfItems: data.totalCount,
+    url: 'https://aimarketplace.com/providers',
+    itemListElement: data.providers.slice(0, 10).map((provider, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      item: {
+        '@type': 'Organization',
+        '@id': `https://aimarketplace.com/providers/${provider.slug}`,
+        name: provider.name,
+        description: provider.description,
+        url: `https://aimarketplace.com/providers/${provider.slug}`,
+        logo: provider.logo,
+        address: {
+          '@type': 'PostalAddress',
+          addressLocality: provider.location,
+          addressCountry: provider.country.toUpperCase(),
+        },
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: provider.rating,
+          reviewCount: provider.reviewCount,
+          bestRating: 5,
+          worstRating: 1,
+        },
+        foundingDate: provider.founded.toString(),
+        numberOfEmployees: {
+          '@type': 'QuantitativeValue',
+          value: provider.companySize === 'small' ? 25 : provider.companySize === 'medium' ? 125 : 500,
+        },
+        knowsAbout: provider.expertiseAreas,
+        serviceArea: provider.industries,
+        hasCredential: provider.certifications.map((cert: string) => ({
+          '@type': 'EducationalOccupationalCredential',
+          name: cert,
+        })),
+      },
+    })),
+  };
+}
+
+export function generateProviderProfileSchema(provider: any) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    '@id': `https://aimarketplace.com/providers/${provider.slug}`,
+    name: provider.name,
+    description: provider.description,
+    url: `https://aimarketplace.com/providers/${provider.slug}`,
+    logo: provider.logo,
+    image: provider.logo,
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: provider.location,
+      addressCountry: provider.country.toUpperCase(),
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: provider.rating,
+      reviewCount: provider.reviewCount,
+      bestRating: 5,
+      worstRating: 1,
+    },
+    foundingDate: provider.founded.toString(),
+    numberOfEmployees: {
+      '@type': 'QuantitativeValue',
+      value: provider.companySize === 'small' ? 25 : provider.companySize === 'medium' ? 125 : 500,
+    },
+    knowsAbout: provider.expertiseAreas,
+    serviceArea: provider.industries,
+    hasCredential: provider.certifications.map((cert: string) => ({
+      '@type': 'EducationalOccupationalCredential',
+      name: cert,
+    })),
+    contactPoint: {
+      '@type': 'ContactPoint',
+      contactType: 'customer service',
+      availableLanguage: ['English'],
+    },
+    sameAs: provider.socialLinks || [],
+    makesOffer: provider.services?.map((service: any) => ({
+      '@type': 'Offer',
+      name: service.name,
+      description: service.description,
+      category: service.category,
+    })) || [],
+  };
+}
+
 export function generateServiceSchema(service: {
   name: string;
   description: string;
