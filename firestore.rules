@@ -125,5 +125,36 @@ service cloud.firestore {
                      hasPermission('platform_admin');
       allow write: if hasPermission('platform_admin');
     }
+
+    // RBAC Collections (Role-Based Access Control)
+    // These collections store role and permission definitions
+    
+    // RBAC Permissions (readable by all authenticated users, writable by platform admins)
+    match /rbac_permissions/{permissionId} {
+      allow read: if isAuthenticated();
+      allow write: if hasPermission('platform_admin');
+      allow create: if true; // Allow system initialization
+    }
+
+    // RBAC Roles (readable by all authenticated users, writable by platform admins)
+    match /rbac_roles/{roleId} {
+      allow read: if isAuthenticated();
+      allow write: if hasPermission('platform_admin');
+      allow create: if true; // Allow system initialization
+    }
+
+    // RBAC Permission Groups (readable by all authenticated users, writable by platform admins)
+    match /rbac_permission_groups/{groupId} {
+      allow read: if isAuthenticated();
+      allow write: if hasPermission('platform_admin');
+      allow create: if true; // Allow system initialization
+    }
+
+    // RBAC Role Categories (readable by all authenticated users, writable by platform admins)
+    match /rbac_role_categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if hasPermission('platform_admin');
+      allow create: if true; // Allow system initialization
+    }
   }
 }

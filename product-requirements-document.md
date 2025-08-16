@@ -196,7 +196,7 @@ Integrated messaging platform with file sharing, video calls, and project-specif
 #### Technical Requirements
 - WebSocket connections for real-time updates
 - End-to-end encryption for sensitive communications
-- File storage with CDN delivery
+- File storage in the firebase storage with CDN delivery
 - Video calling API integration
 - Message queue system for reliability
 

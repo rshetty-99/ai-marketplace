@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Search as SearchIcon, Filter, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// import { useAnalytics } from '@/components/providers/analytics-provider';
+import { useAnalytics } from '@/components/providers/analytics-provider';
 import { cn } from '@/lib/utils';
+import { mockServices, serviceCategories } from '@/lib/data/mock-services';
 
 interface SearchSuggestion {
   id: string;
@@ -34,39 +35,78 @@ export function Search({
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const router = useRouter();
-  // const { trackEvent } = useAnalytics();
+  const { trackEvent } = useAnalytics();
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Mock suggestions - TODO: Replace with actual API call
-  const mockSuggestions: SearchSuggestion[] = [
-    {
-      id: '1',
-      type: 'service',
-      title: 'Computer Vision API',
-      subtitle: 'Image recognition and object detection',
-      category: 'Computer Vision'
-    },
-    {
-      id: '2',
-      type: 'service',
-      title: 'NLP Sentiment Analysis',
-      subtitle: 'Real-time text sentiment analysis',
-      category: 'Natural Language Processing'
-    },
-    {
-      id: '3',
-      type: 'provider',
-      title: 'AI Solutions Inc.',
-      subtitle: 'Verified AI service provider',
-    },
-    {
-      id: '4',
-      type: 'category',
-      title: 'Machine Learning',
-      subtitle: '180 available services',
-    },
-  ];
+  // Generate suggestions from actual data
+  const generateSuggestions = useCallback((searchQuery: string): SearchSuggestion[] => {
+    if (searchQuery.length < 2) return [];
+
+    const query = searchQuery.toLowerCase();
+    const suggestions: SearchSuggestion[] = [];
+
+    // Add service suggestions
+    mockServices.forEach(service => {
+      if (
+        service.name.toLowerCase().includes(query) ||
+        service.description.toLowerCase().includes(query) ||
+        service.tags.some(tag => tag.toLowerCase().includes(query))
+      ) {
+        suggestions.push({
+          id: service.id,
+          type: 'service',
+          title: service.name,
+          subtitle: service.tagline || service.description.substring(0, 60) + '...',
+          category: serviceCategories.find(cat => cat.id === service.category)?.name
+        });
+      }
+    });
+
+    // Add provider suggestions
+    const uniqueProviders = new Set<string>();
+    mockServices.forEach(service => {
+      if (
+        service.providerName.toLowerCase().includes(query) &&
+        !uniqueProviders.has(service.providerId)
+      ) {
+        uniqueProviders.add(service.providerId);
+        suggestions.push({
+          id: service.providerId,
+          type: 'provider',
+          title: service.providerName,
+          subtitle: service.provider?.verification.verified ? 'Verified AI service provider' : 'AI service provider',
+        });
+      }
+    });
+
+    // Add category suggestions
+    serviceCategories.forEach(category => {
+      if (
+        category.name.toLowerCase().includes(query) ||
+        category.description.toLowerCase().includes(query)
+      ) {
+        const serviceCount = mockServices.filter(s => s.category === category.id).length;
+        suggestions.push({
+          id: category.id,
+          type: 'category',
+          title: category.name,
+          subtitle: `${serviceCount} available services`,
+        });
+      }
+    });
+
+    // Limit results and prioritize exact matches
+    return suggestions
+      .sort((a, b) => {
+        const aExact = a.title.toLowerCase().includes(query);
+        const bExact = b.title.toLowerCase().includes(query);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      })
+      .slice(0, 8);
+  }, []);
 
   const fetchSuggestions = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 2) {
@@ -76,17 +116,13 @@ export function Search({
 
     setIsLoading(true);
     
-    // TODO: Replace with actual API call
-    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+    // Simulate API delay for realistic UX
+    await new Promise(resolve => setTimeout(resolve, 200));
     
-    const filtered = mockSuggestions.filter(item => 
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.subtitle?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    
-    setSuggestions(filtered);
+    const generatedSuggestions = generateSuggestions(searchQuery);
+    setSuggestions(generatedSuggestions);
     setIsLoading(false);
-  }, []);
+  }, [generateSuggestions]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -112,12 +148,13 @@ export function Search({
     setIsOpen(false);
     
     // Track search event
-    // trackEvent('search_initiated', {
-    //   search_query: searchQuery,
-    //   search_location: 'global_search',
-    // });
+    trackEvent('search_initiated', {
+      search_query: searchQuery,
+      search_location: 'global_search',
+      suggestion_count: suggestions.length,
+    });
 
-    // Navigate to search results
+    // Navigate to catalog with search query
     router.push(`/catalog?search=${encodeURIComponent(searchQuery)}`);
   };
 
@@ -125,19 +162,22 @@ export function Search({
     setQuery(suggestion.title);
     setIsOpen(false);
     
-    // trackEvent('search_suggestion_clicked', {
-    //   suggestion_type: suggestion.type,
-    //   suggestion_id: suggestion.id,
-    //   suggestion_title: suggestion.title,
-    // });
+    trackEvent('search_suggestion_clicked', {
+      suggestion_type: suggestion.type,
+      suggestion_id: suggestion.id,
+      suggestion_title: suggestion.title,
+      search_query: query,
+    });
 
     // Navigate based on suggestion type
     switch (suggestion.type) {
       case 'service':
-        router.push(`/services/${suggestion.id}`);
+        // For now, redirect to catalog with service filter until service detail pages are created
+        router.push(`/catalog?search=${encodeURIComponent(suggestion.title)}`);
         break;
       case 'provider':
-        router.push(`/providers/${suggestion.id}`);
+        // For now, redirect to catalog with provider filter until provider pages are created
+        router.push(`/catalog?search=${encodeURIComponent(suggestion.title)}`);
         break;
       case 'category':
         router.push(`/catalog?category=${suggestion.id}`);
