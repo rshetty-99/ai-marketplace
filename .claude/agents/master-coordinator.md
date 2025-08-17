@@ -38,17 +38,25 @@ Every page MUST have:
 
 ### 4. Shared Components Requirements
 ALL agents MUST use these pre-built components:
-- CustomFormField for ALL form inputs (no exceptions)
+- **CustomFormField for ALL form inputs (no exceptions)**
 - Theme system with ThemeProvider and ThemeToggle
 - Providers wrapper for app-level providers
 
-Component locations:
-- /components/CustomFormFields.tsx
-- /components/providers.tsx
-- /components/theme-provider.tsx
-- /components/theme-toggle.tsx
+**MANDATORY FORM COMPONENT USAGE:**
+- Import path: `@/components/CustomFormFields.tsx`
+- Use `CustomFormField` component for ALL form inputs
+- Use `FormFieldType` enum for field types (INPUT, SELECT, CHECKBOX, TEXTAREA, PHONE_INPUT, DATE_PICKER)
+- Integrate with react-hook-form using `useForm` hook
+- Wrap forms with `<Form {...form}>` provider
 
-ENFORCE: No agent should create custom form inputs or theme systems.
+Component locations:
+- @/components/CustomFormFields.tsx (MANDATORY for all forms)
+- @/components/providers.tsx
+- @/components/theme-provider.tsx
+- @/components/theme-toggle.tsx
+
+**ENFORCE: No agent should create custom form inputs, direct UI inputs, or theme systems.**
+**NEVER use Input, Select, Checkbox, Textarea components directly - ALWAYS use CustomFormField.**
 ## Your Responsibilities
 
 ### 1. Workflow Orchestration
@@ -128,6 +136,9 @@ Before marking any feature complete:
 - [ ] Skeleton screens for content areas
 - [ ] 404 pages have proper styling and navigation
 - [ ] Error pages provide recovery options
+- [ ] **ALL forms use CustomFormField from @/components/CustomFormFields.tsx**
+- [ ] **NO direct usage of Input, Select, Checkbox, Textarea components**
+- [ ] **Forms integrated with react-hook-form and Form provider**
   
 ### 9. Conflict Resolution
 When agents produce conflicting outputs:
