@@ -1,6 +1,7 @@
 /**
  * SEO Meta Tag Generator
  * Dynamically generates meta tags based on page context, filters, and content
+ * Enhanced with profile-specific SEO optimization
  */
 
 import { Metadata } from 'next';
@@ -16,6 +17,50 @@ export interface MetaGeneratorOptions {
   searchQuery?: string;
   resultCount?: number;
   page?: number;
+}
+
+export interface ProfileSEOData {
+  // Basic Info
+  name: string;
+  title?: string;
+  description: string;
+  slug: string;
+  userType: 'freelancer' | 'vendor' | 'organization';
+  
+  // Contact & Location
+  email?: string;
+  website?: string;
+  location?: string;
+  
+  // Professional Info
+  skills?: string[];
+  services?: string[];
+  experience?: number;
+  hourlyRate?: number;
+  currency?: string;
+  
+  // Media
+  avatar?: string;
+  portfolioImages?: string[];
+  
+  // Ratings & Reviews
+  rating?: number;
+  reviewCount?: number;
+  completedProjects?: number;
+  
+  // Social Links
+  linkedinUrl?: string;
+  githubUrl?: string;
+  twitterUrl?: string;
+  
+  // Business Info (for vendors/organizations)
+  companyName?: string;
+  foundedYear?: number;
+  teamSize?: number;
+  
+  // Timestamps
+  joinedDate?: Date;
+  lastActive?: Date;
 }
 
 const SITE_NAME = 'AI Marketplace';
@@ -227,6 +272,169 @@ export class MetaGenerator {
   }
 
   /**
+   * Generate optimized metadata for profile pages
+   */
+  static generateProfileMetadata(data: ProfileSEOData): Metadata {
+    const routePrefix = data.userType === 'freelancer' ? 'providers' : 
+                       data.userType === 'vendor' ? 'vendors' : 'organizations';
+    const profileUrl = `${SITE_URL}/${routePrefix}/${data.slug}`;
+    
+    const title = this.generateProfileTitle(data);
+    const description = this.generateProfileDescription(data);
+    const keywords = this.generateProfileKeywords(data);
+    const image = data.avatar || DEFAULT_OG_IMAGE;
+    const imageUrl = image.startsWith('http') ? image : `${SITE_URL}${image}`;
+
+    return {
+      title,
+      description,
+      keywords: keywords.join(', '),
+      
+      robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-video-preview': -1,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+        },
+      },
+      
+      openGraph: {
+        type: 'profile',
+        url: profileUrl,
+        title,
+        description,
+        siteName: SITE_NAME,
+        images: [
+          {
+            url: imageUrl,
+            width: 1200,
+            height: 630,
+            alt: `${data.name} - ${title}`,
+          },
+        ],
+        locale: 'en_US',
+      },
+      
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [imageUrl],
+      },
+      
+      other: {
+        'profile:first_name': data.name.split(' ')[0],
+        'profile:last_name': data.name.split(' ').slice(1).join(' '),
+        'profile:username': data.slug,
+        ...(data.rating && { 'rating': data.rating.toString() }),
+        ...(data.reviewCount && { 'review_count': data.reviewCount.toString() }),
+      },
+      
+      alternates: {
+        canonical: profileUrl,
+      },
+    };
+  }
+
+  /**
+   * Generate profile-specific title
+   */
+  private static generateProfileTitle(data: ProfileSEOData): string {
+    const baseTitle = data.title || data.name;
+    const userTypeLabel = data.userType === 'freelancer' ? 'Freelancer' :
+                         data.userType === 'vendor' ? 'Vendor' : 'Organization';
+    
+    let title = `${baseTitle} - ${userTypeLabel}`;
+    
+    if (data.skills?.length) {
+      const topSkills = data.skills.slice(0, 3).join(', ');
+      title += ` | ${topSkills}`;
+    }
+    
+    if (data.location) {
+      title += ` | ${data.location}`;
+    }
+    
+    title += ` | ${SITE_NAME}`;
+    
+    return title.length > 60 ? title.substring(0, 57) + '...' : title;
+  }
+
+  /**
+   * Generate profile-specific description
+   */
+  private static generateProfileDescription(data: ProfileSEOData): string {
+    let description = data.description;
+    
+    if (description.length < 100) {
+      const userTypeLabel = data.userType === 'freelancer' ? 'freelancer' :
+                           data.userType === 'vendor' ? 'vendor' : 'organization';
+      
+      description += ` Professional ${userTypeLabel}`;
+      
+      if (data.skills?.length) {
+        description += ` specializing in ${data.skills.slice(0, 3).join(', ')}`;
+      }
+      
+      if (data.location) {
+        description += ` based in ${data.location}`;
+      }
+      
+      if (data.experience) {
+        description += ` with ${data.experience}+ years of experience`;
+      }
+      
+      if (data.rating && data.reviewCount) {
+        description += `. Rated ${data.rating}/5 stars by ${data.reviewCount} clients`;
+      }
+      
+      description += `. Hire on AI Marketplace.`;
+    }
+    
+    return description.length > 160 ? description.substring(0, 157) + '...' : description;
+  }
+
+  /**
+   * Generate profile-specific keywords
+   */
+  private static generateProfileKeywords(data: ProfileSEOData): string[] {
+    const keywords = [];
+    
+    keywords.push(data.name.toLowerCase());
+    if (data.title) {
+      keywords.push(data.title.toLowerCase());
+    }
+    
+    if (data.skills?.length) {
+      keywords.push(...data.skills.map(skill => skill.toLowerCase()));
+    }
+    
+    if (data.services?.length) {
+      keywords.push(...data.services.map(service => service.toLowerCase()));
+    }
+    
+    const userTypeKeywords = data.userType === 'freelancer' 
+      ? ['freelancer', 'contractor', 'consultant', 'specialist']
+      : data.userType === 'vendor'
+      ? ['vendor', 'company', 'agency', 'firm', 'business']
+      : ['organization', 'enterprise', 'corporation', 'institution'];
+    
+    keywords.push(...userTypeKeywords);
+    
+    if (data.location) {
+      keywords.push(data.location.toLowerCase());
+    }
+    
+    keywords.push('ai marketplace', 'hire', 'professional services', 'remote work');
+    
+    return [...new Set(keywords)].slice(0, 20);
+  }
+
+  /**
    * Helper: Get filter context for title
    */
   private static getFilterContext(filters: Record<string, any>): string {
@@ -351,5 +559,158 @@ export function generateOrganizationSchema(): object {
       contactType: 'customer service',
       availableLanguage: 'en',
     },
+  };
+}
+
+/**
+ * Generate structured data for profile pages
+ */
+export function generateProfileStructuredData(data: ProfileSEOData): object {
+  const routePrefix = data.userType === 'freelancer' ? 'providers' : 
+                     data.userType === 'vendor' ? 'vendors' : 'organizations';
+  const profileUrl = `${SITE_URL}/${routePrefix}/${data.slug}`;
+
+  if (data.userType === 'freelancer') {
+    return generateFreelancerSchema(data, profileUrl);
+  } else if (data.userType === 'vendor') {
+    return generateVendorSchema(data, profileUrl);
+  } else {
+    return generateBusinessSchema(data, profileUrl);
+  }
+}
+
+function generateFreelancerSchema(data: ProfileSEOData, profileUrl: string): object {
+  const schema: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: data.name,
+    url: profileUrl,
+    description: data.description,
+    jobTitle: data.title,
+    ...(data.avatar && { image: data.avatar }),
+    ...(data.email && { email: data.email }),
+    ...(data.website && { url: data.website }),
+    ...(data.location && { address: { '@type': 'PostalAddress', addressLocality: data.location } }),
+  };
+
+  if (data.skills?.length) {
+    schema.knowsAbout = data.skills;
+  }
+
+  if (data.rating && data.reviewCount) {
+    schema.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: data.rating,
+      reviewCount: data.reviewCount,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
+  const sameAs = [];
+  if (data.linkedinUrl) sameAs.push(data.linkedinUrl);
+  if (data.githubUrl) sameAs.push(data.githubUrl);
+  if (data.twitterUrl) sameAs.push(data.twitterUrl);
+  if (sameAs.length > 0) {
+    schema.sameAs = sameAs;
+  }
+
+  return schema;
+}
+
+function generateVendorSchema(data: ProfileSEOData, profileUrl: string): object {
+  const schema: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'LocalBusiness',
+    name: data.companyName || data.name,
+    url: profileUrl,
+    description: data.description,
+    ...(data.avatar && { image: data.avatar }),
+    ...(data.email && { email: data.email }),
+    ...(data.website && { url: data.website }),
+    ...(data.location && { address: { '@type': 'PostalAddress', addressLocality: data.location } }),
+  };
+
+  schema.founder = {
+    '@type': 'Person',
+    name: data.name,
+  };
+
+  if (data.foundedYear) {
+    schema.foundingDate = data.foundedYear.toString();
+  }
+
+  if (data.teamSize) {
+    schema.numberOfEmployees = data.teamSize;
+  }
+
+  if (data.services?.length) {
+    schema.serviceType = data.services;
+  }
+
+  if (data.rating && data.reviewCount) {
+    schema.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: data.rating,
+      reviewCount: data.reviewCount,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
+  return schema;
+}
+
+function generateBusinessSchema(data: ProfileSEOData, profileUrl: string): object {
+  const schema: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: data.companyName || data.name,
+    url: profileUrl,
+    description: data.description,
+    ...(data.avatar && { logo: data.avatar }),
+    ...(data.email && { email: data.email }),
+    ...(data.website && { url: data.website }),
+    ...(data.location && { address: { '@type': 'PostalAddress', addressLocality: data.location } }),
+  };
+
+  if (data.foundedYear) {
+    schema.foundingDate = data.foundedYear.toString();
+  }
+
+  if (data.teamSize) {
+    schema.numberOfEmployees = data.teamSize;
+  }
+
+  if (data.services?.length) {
+    schema.makesOffer = data.services.map(service => ({
+      '@type': 'Offer',
+      itemOffered: {
+        '@type': 'Service',
+        name: service,
+      },
+    }));
+  }
+
+  return schema;
+}
+
+/**
+ * Generate sitemap entry for profile
+ */
+export function generateProfileSitemapEntry(data: ProfileSEOData): {
+  url: string;
+  lastModified: Date;
+  changeFrequency: 'daily' | 'weekly' | 'monthly';
+  priority: number;
+} {
+  const routePrefix = data.userType === 'freelancer' ? 'providers' : 
+                     data.userType === 'vendor' ? 'vendors' : 'organizations';
+  
+  return {
+    url: `${SITE_URL}/${routePrefix}/${data.slug}`,
+    lastModified: data.lastActive || new Date(),
+    changeFrequency: 'weekly',
+    priority: data.rating && data.rating > 4 ? 0.9 : 0.7,
   };
 }

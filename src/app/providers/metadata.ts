@@ -206,43 +206,39 @@ function formatIndustry(industry: string): string {
  * Generate metadata for individual provider profile pages
  */
 export function generateProviderProfileMetadata(provider: any): Metadata {
-  const title = `${provider.name} - AI Service Provider | AI Marketplace`;
-  const description = provider.description || `${provider.name} provides expert AI services and solutions. View portfolio, client testimonials, and connect directly for your AI project needs.`;
+  // Enhanced with comprehensive SEO optimization
+  const { MetaGenerator, ProfileSEOData } = require('@/lib/seo/meta-generator');
   
-  return {
-    title,
-    description,
-    keywords: [
-      provider.name,
-      'AI service provider',
-      'artificial intelligence',
-      ...(provider.expertiseAreas || []),
-      ...(provider.industries || []),
-    ].join(', '),
-    openGraph: {
-      title,
-      description,
-      url: `${process.env.NEXT_PUBLIC_SITE_URL}/providers/${provider.slug}`,
-      siteName: 'AI Marketplace',
-      images: provider.logo ? [
-        {
-          url: provider.logo,
-          width: 1200,
-          height: 630,
-          alt: `${provider.name} logo`,
-        },
-      ] : [],
-      locale: 'en_US',
-      type: 'profile',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: provider.logo ? [provider.logo] : [],
-    },
-    alternates: {
-      canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/providers/${provider.slug}`,
-    },
+  // Convert provider data to ProfileSEOData format
+  const profileData: ProfileSEOData = {
+    name: provider.name || provider.companyName || 'Unknown Provider',
+    title: provider.title || provider.jobTitle,
+    description: provider.description || provider.bio || `${provider.name} provides expert AI services and solutions.`,
+    slug: provider.slug,
+    userType: 'freelancer', // Providers are freelancers in this route
+    email: provider.email,
+    website: provider.website,
+    location: provider.location,
+    skills: provider.skills || provider.expertiseAreas || [],
+    services: provider.services || provider.serviceOfferings || [],
+    experience: provider.yearsExperience,
+    hourlyRate: provider.hourlyRate,
+    currency: provider.currency || 'USD',
+    avatar: provider.avatar || provider.logo,
+    portfolioImages: provider.portfolioImages || [],
+    rating: provider.rating,
+    reviewCount: provider.reviewCount,
+    completedProjects: provider.completedProjects,
+    linkedinUrl: provider.socialLinks?.linkedin,
+    githubUrl: provider.socialLinks?.github,
+    twitterUrl: provider.socialLinks?.twitter,
+    companyName: provider.companyName,
+    foundedYear: provider.foundedYear,
+    teamSize: provider.teamSize,
+    joinedDate: provider.joinedDate,
+    lastActive: provider.lastActive || provider.updatedAt,
   };
+
+  // Generate comprehensive metadata using our enhanced system
+  return MetaGenerator.generateProfileMetadata(profileData);
 }

@@ -5,6 +5,7 @@ import { ProviderProfileClient } from './provider-profile-client';
 import { ProviderProfileSkeleton } from './loading';
 import { generateProviderProfileMetadata } from '../metadata';
 import { getProviderBySlug } from '@/lib/api/providers';
+import { generateProfileStructuredData, ProfileSEOData } from '@/lib/seo/meta-generator';
 
 // Provider data now loaded from API
 
@@ -44,10 +45,52 @@ export default async function ProviderProfilePage({ params }: ProviderProfilePag
       notFound();
     }
 
+    // Generate structured data for SEO
+    const profileData: ProfileSEOData = {
+      name: provider.name || provider.companyName || 'Unknown Provider',
+      title: provider.title || provider.jobTitle,
+      description: provider.description || provider.bio || `${provider.name} provides expert AI services and solutions.`,
+      slug: provider.slug,
+      userType: 'freelancer',
+      email: provider.email,
+      website: provider.website,
+      location: provider.location,
+      skills: provider.skills || provider.expertiseAreas || [],
+      services: provider.services || provider.serviceOfferings || [],
+      experience: provider.yearsExperience,
+      hourlyRate: provider.hourlyRate,
+      currency: provider.currency || 'USD',
+      avatar: provider.avatar || provider.logo,
+      portfolioImages: provider.portfolioImages || [],
+      rating: provider.rating,
+      reviewCount: provider.reviewCount,
+      completedProjects: provider.completedProjects,
+      linkedinUrl: provider.socialLinks?.linkedin,
+      githubUrl: provider.socialLinks?.github,
+      twitterUrl: provider.socialLinks?.twitter,
+      companyName: provider.companyName,
+      foundedYear: provider.foundedYear,
+      teamSize: provider.teamSize,
+      joinedDate: provider.joinedDate,
+      lastActive: provider.lastActive || provider.updatedAt,
+    };
+
+    const structuredData = generateProfileStructuredData(profileData);
+
     return (
-      <Suspense fallback={<ProviderProfileSkeleton />}>
-        <ProviderProfileClient provider={provider} />
-      </Suspense>
+      <>
+        {/* Structured Data for SEO */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+        
+        <Suspense fallback={<ProviderProfileSkeleton />}>
+          <ProviderProfileClient provider={provider} />
+        </Suspense>
+      </>
     );
   } catch (error) {
     console.error('Error loading provider:', error);
