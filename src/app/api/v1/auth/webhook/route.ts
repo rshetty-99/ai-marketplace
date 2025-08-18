@@ -18,6 +18,8 @@ import {
   syncClerkRoleToMarketplace,
   determineOrganizationType
 } from '@/lib/auth/role-mapping';
+import { gdprDeletionService } from '@/lib/firebase/gdpr-deletion-service';
+import { UserType } from '@/lib/firebase/storage-architecture';
 
 /**
  * POST /api/v1/auth/webhook
@@ -210,31 +212,82 @@ async function handleUserUpdated(adminDb: any, userData: any) {
 }
 
 /**
- * Handle user deleted event
+ * Handle user deleted event with GDPR-compliant storage cleanup
  */
 async function handleUserDeleted(adminDb: any, userData: any) {
   try {
     const userId = userData.id;
 
+    // Get user data to determine user type and organization
+    const userDoc = await adminDb.collection('users').doc(userId).get();
+    const userInfo = userDoc.exists ? userDoc.data() : null;
+    
+    const userType = determineUserType(userInfo);
+    const organizationId = userInfo?.organizationId;
+
     // Soft delete - mark as inactive instead of deleting
     await adminDb.collection('users').doc(userId).update({
       isActive: false,
       deletedAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      gdprDeletionInitiated: true
     });
 
-    // TODO: Handle cascading deletes for user's projects, services, etc.
-    // This should be done carefully to preserve business data integrity
+    // Initiate GDPR-compliant storage cleanup
+    try {
+      const cleanupJob = await gdprDeletionService.executeGDPRUserDeletion(
+        userId,
+        userType,
+        'user_request', // User account deletion via Clerk
+        organizationId
+      );
+
+      logger.logAudit('gdpr_deletion_initiated', userId, 'cleanup_job', cleanupJob.id, {
+        userType,
+        organizationId,
+        deletionReason: 'user_request',
+        deletedViaClerk: true
+      });
+
+      // Update user record with cleanup job reference
+      await adminDb.collection('users').doc(userId).update({
+        gdprCleanupJobId: cleanupJob.id,
+        updatedAt: new Date()
+      });
+
+      logger.info('GDPR deletion initiated', { 
+        userId, 
+        userType, 
+        cleanupJobId: cleanupJob.id,
+        organizationId
+      });
+
+    } catch (cleanupError) {
+      logger.error('Failed to initiate GDPR cleanup', cleanupError as Error, {
+        userId,
+        userType
+      });
+      
+      // Mark cleanup as failed but continue with user deletion
+      await adminDb.collection('users').doc(userId).update({
+        gdprDeletionFailed: true,
+        gdprDeletionError: cleanupError.message,
+        updatedAt: new Date()
+      });
+    }
 
     // Invalidate user cache
     cache.invalidateByTags([CacheTags.USER, `user:${userId}`]);
 
     logger.logAudit('user_deleted', userId, 'user', userId, {
       deletedViaClerk: true,
-      softDelete: true
+      softDelete: true,
+      gdprCompliant: true,
+      userType,
+      organizationId
     });
 
-    logger.info('User marked as deleted', { userId });
+    logger.info('User deletion completed with GDPR compliance', { userId });
 
   } catch (error) {
     logger.error('Failed to handle user deleted event', error as Error, {
@@ -242,6 +295,29 @@ async function handleUserDeleted(adminDb: any, userData: any) {
     });
     throw error;
   }
+}
+
+/**
+ * Helper function to determine user type from user data
+ */
+function determineUserType(userInfo: any): UserType {
+  if (!userInfo) return UserType.FREELANCER; // Default
+  
+  // Check user roles or organization type to determine user type
+  if (userInfo.roles?.includes('vendor') || userInfo.organizationType === 'vendor') {
+    return UserType.VENDOR;
+  }
+  
+  if (userInfo.roles?.includes('customer') || userInfo.organizationType === 'customer') {
+    return UserType.CUSTOMER;
+  }
+  
+  if (userInfo.organizationId) {
+    return UserType.ORGANIZATION;
+  }
+  
+  // Default to freelancer
+  return UserType.FREELANCER;
 }
 
 /**

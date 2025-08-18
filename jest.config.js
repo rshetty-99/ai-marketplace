@@ -14,7 +14,7 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup/jest.setup.js'],
   
   // Module name mapping
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/tests/(.*)$': '<rootDir>/tests/$1',
   },
@@ -23,6 +23,7 @@ const customJestConfig = {
   testMatch: [
     '<rootDir>/tests/unit/**/*.test.{js,jsx,ts,tsx}',
     '<rootDir>/tests/integration/**/*.test.{js,jsx,ts,tsx}',
+    '<rootDir>/src/**/__tests__/**/*.test.{js,jsx,ts,tsx}',
   ],
   
   // Coverage configuration
@@ -106,9 +107,9 @@ const customJestConfig = {
     '!src/**/*.d.ts',
   ],
   
-  // Global test setup
-  globalSetup: '<rootDir>/tests/setup/global-setup.js',
-  globalTeardown: '<rootDir>/tests/setup/global-teardown.js',
+  // Global test setup (disabled for semantic search tests)
+  // globalSetup: '<rootDir>/tests/setup/global-setup.js',
+  // globalTeardown: '<rootDir>/tests/setup/global-teardown.js',
   
   // Test environment options
   testEnvironmentOptions: {
@@ -135,7 +136,7 @@ const customJestConfig = {
   ],
   
   // Snapshot serializers
-  snapshotSerializers: ['@emotion/jest/serializer'],
+  // snapshotSerializers: ['@emotion/jest/serializer'], // Commented out as package not available
   
   // Maximum worker processes
   maxWorkers: '50%',

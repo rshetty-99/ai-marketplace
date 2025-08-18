@@ -40,6 +40,7 @@ import { Project, ProjectFilters } from '@/lib/firebase/projects';
 import { toast } from 'sonner';
 import { DocumentSnapshot } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 const experienceLevels = [
   { value: 'entry', label: 'Entry Level (0-2 years)' },
@@ -742,14 +743,33 @@ export default function SearchPage() {
           <Card>
             <CardContent className="p-12 text-center">
               <div className="space-y-4">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
-                  <Award className="w-8 h-8 text-gray-400" />
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
+                  <Award className="w-8 h-8 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">Services Search Coming Soon</h3>
+                  <h3 className="text-lg font-semibold">AI Services Catalog</h3>
                   <p className="text-muted-foreground">
-                    We're working on building the services search functionality.
+                    Discover AI services from verified providers in our comprehensive catalog.
                   </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button asChild>
+                    <Link href="/catalog">
+                      <Award className="w-4 h-4 mr-2" />
+                      Browse All Services
+                    </Link>
+                  </Button>
+                  {searchTerm && (
+                    <Button variant="outline" asChild>
+                      <Link href={`/catalog?search=${encodeURIComponent(searchTerm)}`}>
+                        <Search className="w-4 h-4 mr-2" />
+                        Search "{searchTerm}" in Services
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <p>Popular categories: Computer Vision, NLP, Predictive Analytics</p>
                 </div>
               </div>
             </CardContent>

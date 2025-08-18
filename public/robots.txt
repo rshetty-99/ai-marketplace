@@ -1,0 +1,33 @@
+# AI Marketplace robots.txt
+# Allow all crawlers
+
+User-agent: *
+Allow: /
+
+# Specific rules for major search engines
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+# Block admin and API routes
+User-agent: *
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /_next/
+Disallow: /signin
+Disallow: /signup
+
+# Allow specific API endpoints for structured data
+Allow: /api/catalog/search
+Allow: /api/services/
+
+# Sitemap location
+Sitemap: https://ai-marketplace.com/sitemap.xml
+Sitemap: https://ai-marketplace.com/sitemap-services.xml
+Sitemap: https://ai-marketplace.com/sitemap-categories.xml
+Sitemap: https://ai-marketplace.com/sitemap-providers.xml
