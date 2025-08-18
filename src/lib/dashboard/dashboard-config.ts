@@ -28,7 +28,19 @@ import {
   Zap,
   FolderOpen,
   GitBranch,
-  HeartHandshake
+  HeartHandshake,
+  Mail,
+  Bell,
+  Video,
+  Phone,
+  Send,
+  Inbox,
+  Archive,
+  Trash,
+  PinIcon,
+  Search,
+  Filter,
+  Tags
 } from 'lucide-react';
 
 export interface DashboardSection {
@@ -147,11 +159,39 @@ export const freelancerDashboard: DashboardSection[] = [
     ]
   },
   {
-    title: 'Messages',
+    title: 'Communication',
     icon: MessageSquare,
-    href: '/dashboard/messages',
-    description: 'Client communications',
-    badge: '2'
+    href: '/dashboard/communication',
+    description: 'All your communications',
+    badge: '7',
+    children: [
+      {
+        title: 'Chat',
+        icon: MessageSquare,
+        href: '/dashboard/communication/chat',
+        description: 'Real-time project chat',
+        badge: '3'
+      },
+      {
+        title: 'Inbox',
+        icon: Mail,
+        href: '/dashboard/communication/inbox',
+        description: 'Unified message inbox',
+        badge: '4'
+      },
+      {
+        title: 'Video Calls',
+        icon: Video,
+        href: '/dashboard/communication/video',
+        description: 'Schedule and join meetings'
+      },
+      {
+        title: 'Notifications',
+        icon: Bell,
+        href: '/dashboard/communication/notifications',
+        description: 'Manage your alerts'
+      }
+    ]
   },
   {
     title: 'Reviews',
@@ -361,11 +401,45 @@ export const vendorDashboard: DashboardSection[] = [
     ]
   },
   {
-    title: 'Messages',
+    title: 'Communication Hub',
     icon: MessageSquare,
-    href: '/dashboard/messages',
+    href: '/dashboard/communication',
     description: 'Team and client communications',
-    badge: '5'
+    badge: '12',
+    children: [
+      {
+        title: 'Team Chat',
+        icon: MessageSquare,
+        href: '/dashboard/communication/team-chat',
+        description: 'Internal team discussions',
+        badge: '5'
+      },
+      {
+        title: 'Client Communications',
+        icon: Mail,
+        href: '/dashboard/communication/clients',
+        description: 'Client messages and updates',
+        badge: '7'
+      },
+      {
+        title: 'Project Channels',
+        icon: FolderOpen,
+        href: '/dashboard/communication/project-channels',
+        description: 'Project-specific communications'
+      },
+      {
+        title: 'Video Meetings',
+        icon: Video,
+        href: '/dashboard/communication/meetings',
+        description: 'Schedule and manage meetings'
+      },
+      {
+        title: 'Announcements',
+        icon: Bell,
+        href: '/dashboard/communication/announcements',
+        description: 'Company and team announcements'
+      }
+    ]
   },
   {
     title: 'Settings',
@@ -472,10 +546,39 @@ export const customerDashboard: DashboardSection[] = [
     description: 'Payments and invoices'
   },
   {
-    title: 'Messages',
+    title: 'Communications',
     icon: MessageSquare,
-    href: '/dashboard/messages',
-    description: 'Provider communications'
+    href: '/dashboard/communication',
+    description: 'Provider and team communications',
+    badge: '6',
+    children: [
+      {
+        title: 'Provider Chat',
+        icon: MessageSquare,
+        href: '/dashboard/communication/providers',
+        description: 'Chat with service providers',
+        badge: '4'
+      },
+      {
+        title: 'Project Inbox',
+        icon: Mail,
+        href: '/dashboard/communication/projects',
+        description: 'Project-related messages',
+        badge: '2'
+      },
+      {
+        title: 'Meetings',
+        icon: Video,
+        href: '/dashboard/communication/meetings',
+        description: 'Schedule consultations'
+      },
+      {
+        title: 'Team Messages',
+        icon: Users,
+        href: '/dashboard/communication/team',
+        description: 'Internal team communications'
+      }
+    ]
   },
   {
     title: 'Analytics',
